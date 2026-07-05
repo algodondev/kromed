@@ -78,9 +78,10 @@ Reminder and digest product workflows remain inactive until Kromed endpoints
 and app tokens are ready. The smoke test, transcription preview, inbound agent,
 agent test suite, AI draft workflow, Supabase context workflow, and business
 operations workflow are active for integration verification. The Business
-Operations Tool has retry-on-fail enabled on its Supabase nodes, but recent
-non-mutating smoke tests still timed out around the `Get operation visits`
-step, so it needs further performance or query narrowing before demo reliance.
+Operations Tool now collapses each broad Supabase context read before the next
+read, so downstream Supabase nodes no longer fan out once per returned item.
+Recent smoke checks finished the shared business-operation reads in roughly
+1-2 seconds instead of timing out around `Get operation visits`.
 
 ## Required Environment
 
@@ -252,7 +253,7 @@ Allowed leader/admin operations:
 Allowed collaborator operations:
 
 - `complete_visit` for an assigned visit.
-- `request_reschedule` for an assigned visit, which remains pending Karla
+- `request_reschedule` for an assigned visit, which remains pending leader/admin
   approval.
 
 Denied operations:
@@ -307,10 +308,16 @@ Implementation notes:
   deterministic.
 - Voice notes with a transcript use the same operation path as written
   messages.
-- On 2026-07-05, 12 Supabase nodes were configured with retry-on-fail
-  behavior. A safe unknown-sender mutation denial test still timed out before
-  a webhook response, and the latest recorded error remained a Supabase timeout
-  at `Get operation visits`.
+- On 2026-07-05, the shared Business Operations context-read chain was patched
+  with one-item collapse nodes after `profiles`, `collaborators`, `patients`,
+  `visits`, and `inventory_items` reads. This fixed n8n item multiplication
+  where 16 profile rows previously expanded into hundreds or thousands of
+  downstream Supabase reads.
+- A controlled role/path smoke matrix covered leader scheduling, validation,
+  payment, inventory, Carla collaborator completion, Carla collaborator
+  reschedule, Carla leader-only denial, known-patient booking, new-patient
+  intake, no-disclosure, clinical escalation, operational question, and audio
+  handling. Temporary test rows were cleaned after verification.
 
 ## Inbound Message Agent Test Suite
 
