@@ -23,7 +23,7 @@ export function LoginForm() {
           type="email"
           autoComplete="email"
           required
-          placeholder="karla.admin@example.test"
+          placeholder="lider@example.com"
         />
       </div>
 

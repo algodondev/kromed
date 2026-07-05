@@ -272,11 +272,6 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
         <strong className="block truncate font-[var(--font-heading)] text-[15px] font-extrabold text-[var(--ink)]">
           Kromed
         </strong>
-        {!compact ? (
-          <span className="block text-xs text-[var(--text-secondary)]">
-            Vista web - prototipo navegable
-          </span>
-        ) : null}
       </div>
     </div>
   );
@@ -423,16 +418,13 @@ export function KromedWorkspace({
     data.collaborators.find((collaborator) => collaborator.profile_id === data.profile.id) ??
     data.collaborators[0] ??
     null;
+  const role: WorkspaceRole =
+    data.role === "collaborator" ? "colaborador" : "karla";
 
-  const [role, setRole] = React.useState<WorkspaceRole>(
-    data.role === "collaborator" ? "colaborador" : "karla",
-  );
   const [view, setView] = React.useState<View>(
     data.role === "collaborator" ? "myAgenda" : "dashboard",
   );
-  const [activeCollaboratorId, setActiveCollaboratorId] = React.useState(
-    ownCollaborator?.id ?? "",
-  );
+  const activeCollaboratorId = ownCollaborator?.id ?? "";
   const [selectedPatientId, setSelectedPatientId] = React.useState<string | null>(
     data.patients[0]?.id ?? null,
   );
@@ -466,11 +458,6 @@ export function KromedWorkspace({
     if (nextView === "finance") {
       setFinanceTab("income");
     }
-  };
-
-  const switchRole = (nextRole: WorkspaceRole) => {
-    setRole(nextRole);
-    setView(nextRole === "karla" ? "dashboard" : "myAgenda");
   };
 
   const visitsForPatient = (patientId: string) =>
@@ -1886,69 +1873,8 @@ export function KromedWorkspace({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--surface)] text-[var(--ink)]">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-white px-4 py-3 lg:px-6">
-        <BrandBlock />
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {role === "colaborador" && data.collaborators.length ? (
-            <select
-              aria-label="Seleccionar colaborador"
-              className="h-8 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 text-xs font-semibold text-[var(--ink)]"
-              onChange={(event) => setActiveCollaboratorId(event.target.value)}
-              value={activeCollaboratorId}
-            >
-              {data.collaborators.map((collaborator) => (
-                <option key={collaborator.id} value={collaborator.id}>
-                  {collaborator.name}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <div className="flex rounded-lg bg-[var(--surface)] p-1 ring-1 ring-[var(--line)]">
-            <Button
-              className={cn(
-                "h-7 rounded-md text-xs",
-                role === "karla" && "bg-white text-[var(--primary-darker)] shadow-sm",
-              )}
-              onClick={() => switchRole("karla")}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Panel de Karla (líder)
-            </Button>
-            <Button
-              className={cn(
-                "h-7 rounded-md text-xs",
-                role === "colaborador" && "bg-white text-[var(--primary-darker)] shadow-sm",
-              )}
-              onClick={() => switchRole("colaborador")}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Portal de colaborador
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="min-h-[calc(100vh-61px)] bg-white">
-        <div className="flex items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-xs text-[var(--ink-soft)]">
-          <div className="flex gap-1.5">
-            <span className="size-2.5 rounded-full bg-[#f36b62]" />
-            <span className="size-2.5 rounded-full bg-[#f2bd4b]" />
-            <span className="size-2.5 rounded-full bg-[#58c172]" />
-          </div>
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-3 py-1">
-            <LockIcon className="size-3.5 shrink-0" />
-            <span className="truncate">app.kromed.com/{view.toLowerCase()}</span>
-          </div>
-          <Badge className="hidden rounded-full bg-white text-[var(--ink-soft)] sm:inline-flex" variant="secondary">
-            Prototipo navegable
-          </Badge>
-        </div>
-
-        <div className="flex min-h-[calc(100vh-96px)] flex-col lg:flex-row">
+      <div className="min-h-screen bg-white">
+        <div className="flex min-h-screen flex-col lg:flex-row">
           <aside className="flex w-full min-w-0 max-w-full shrink-0 flex-col overflow-hidden border-b border-[var(--line)] bg-white p-3 lg:w-60 lg:border-b-0 lg:border-r">
             <div className="hidden px-2 pb-4 lg:block">
               <BrandBlock compact />
