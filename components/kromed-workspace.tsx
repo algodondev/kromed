@@ -82,6 +82,13 @@ type ReportStatus =
   | { state: "loading" }
   | { state: "success"; message: string }
   | { state: "error"; message: string };
+type GeneratedReport = {
+  reportType: ReportType;
+  title: string;
+  summary: string;
+  requestedBy: string;
+  metadata?: Record<string, unknown>;
+};
 
 type Patient = DashboardData["patients"][number];
 type Visit = DashboardData["visits"][number] & {
@@ -253,6 +260,42 @@ function isSameCalendarDay(value: string | null | undefined, anchor: Date) {
 
 function formatTimeRange(start: string | null | undefined, end: string | null | undefined) {
   return `${formatTime(start)} - ${formatTime(end)}`;
+}
+
+function slugifyFilePart(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function downloadReportFile(report: GeneratedReport) {
+  const generatedAt = new Date();
+  const content = [
+    report.title,
+    "",
+    report.summary,
+    "",
+    `Generado por: ${report.requestedBy}`,
+    `Fecha: ${formatDateTime(generatedAt.toISOString())}`,
+    `Tipo: ${report.reportType}`,
+    "",
+    "Metadata",
+    JSON.stringify(report.metadata ?? {}, null, 2),
+  ].join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${slugifyFilePart(report.title) || "reporte-kromed"}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function toneForStatus(status: string | null | undefined) {
@@ -650,18 +693,22 @@ export function KromedWorkspace({
       });
       const result = (await response.json()) as {
         error?: string;
-        report?: { title?: string };
+        report?: GeneratedReport;
       };
 
       if (!response.ok) {
         throw new Error(result.error ?? "No se pudo generar el reporte.");
       }
 
+      if (result.report) {
+        downloadReportFile(result.report);
+      }
+
       setReportStatus((current) => ({
         ...current,
         [reportType]: {
           state: "success",
-          message: `${result.report?.title ?? "Reporte"} enviado por n8n.`,
+          message: `${result.report?.title ?? "Reporte"} enviado por n8n y descargado.`,
         },
       }));
     } catch (error) {
