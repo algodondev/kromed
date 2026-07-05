@@ -45,11 +45,17 @@ Created in the `cbuild` n8n Cloud workspace:
   - Trigger: Execute Workflow Trigger from the AI agent workflow.
   - Output: narrow sender, conversation, and upcoming-visit context from
     Supabase.
+- `Kromed - Business Operations Tool`
+  - ID: `h1ISthaab26A0Xqq`
+  - Trigger: Execute Workflow Trigger from the AI agent workflow and production
+    webhook `kromed/business-operations-tool`.
+  - Output: authorized Kromed business mutation result with operation status,
+    related entity, reply text, and mutation metadata.
 
 Reminder and digest product workflows remain inactive until Kromed endpoints
 and app tokens are ready. The smoke test, transcription preview, inbound agent,
-agent test suite, AI draft workflow, and Supabase context workflow are active
-for integration verification.
+agent test suite, AI draft workflow, Supabase context workflow, and business
+operations workflow are active for integration verification.
 
 ## Required Environment
 
@@ -163,9 +169,13 @@ Expected behavior:
 - Uses native n8n Supabase nodes to read approved context and write
   `conversations`, `conversation_messages`, `reschedule_requests` when
   applicable, and `automation_runs`.
-- Calls `Kromed - AI Supabase Tool Agent` only for safe operational questions.
+- Calls `Kromed - Business Operations Tool` for role-scoped business
+  operations from verified leaders/admins and collaborators.
+- Calls `Kromed - AI Supabase Tool Agent` for safe read-only operational
+  questions.
 - Never gives clinical advice, exposes another patient's data, finalizes
-  reschedules, or changes payment state.
+  reschedules, or changes payment state outside the approved leader/admin
+  operation path.
 - Skips real Zavu sends when `testMode` is true.
 
 Example test-mode response:
@@ -188,6 +198,91 @@ Example test-mode response:
 }
 ```
 
+## Business Operations Tool
+
+Workflow:
+
+```text
+Kromed - Business Operations Tool
+```
+
+Webhook paths:
+
+```text
+kromed/business-operations-tool
+kromed/business-operations-tool-test
+```
+
+The production path is called by `Kromed - Inbound Message Agent`; the test path
+is reserved for direct workflow verification.
+
+Allowed leader/admin operations:
+
+- `schedule_visit`
+- `approve_visit`
+- `reject_visit`
+- `record_payment`
+- `update_inventory`
+
+Allowed collaborator operations:
+
+- `complete_visit` for an assigned visit.
+- `request_reschedule` for an assigned visit, which remains pending Karla
+  approval.
+
+Denied operations:
+
+- Unknown/unmatched phones cannot mutate business data.
+- Collaborators cannot schedule visits, approve/reject visits for payment,
+  record patient payments, update inventory, or mutate another collaborator's
+  work.
+
+Input shape:
+
+```json
+{
+  "contact_phone": "+50379164921",
+  "message": "Actualiza inventario de Mascarilla a 42 unidades.",
+  "senderType": "admin",
+  "profileId": "optional-profile-id",
+  "collaboratorId": "optional-collaborator-id",
+  "patientId": "optional-patient-id",
+  "matchedVisitId": "optional-visit-id",
+  "source": "inbound_message_agent"
+}
+```
+
+Output shape:
+
+```json
+{
+  "ok": true,
+  "operation": "update_inventory",
+  "status": "succeeded",
+  "allowed": true,
+  "actorRole": "admin",
+  "entityTable": "inventory_items",
+  "entityId": "91000000-0000-4000-8000-000000000001",
+  "replyText": "Listo. Actualizare Mascarilla a 42 unidades.",
+  "mutation": {
+    "node": "Update inventory stock",
+    "id": "91000000-0000-4000-8000-000000000001"
+  }
+}
+```
+
+Implementation notes:
+
+- The workflow uses native n8n Supabase nodes for reads and writes.
+- A deterministic planner normalizes the sender, resolves role, checks
+  operation permission, identifies the target row, and only then routes to a
+  write node.
+- The AI agent has this workflow as a tool, but the inbound workflow also calls
+  it directly for operation requests so authorization and side effects remain
+  deterministic.
+- Voice notes with a transcript use the same operation path as written
+  messages.
+
 ## Inbound Message Agent Test Suite
 
 Webhook path:
@@ -209,6 +304,24 @@ The latest verification passed all scripted cases:
 - clinical or emergency escalation response.
 - voice-note transcription path.
 - voice-note missing-audio-url clarification path.
+- leader scheduling a visit.
+- leader approving a pending visit for payment.
+- leader recording a patient payment.
+- leader updating inventory through a voice-note transcript.
+- collaborator completing an assigned visit.
+- collaborator denial for leader-only approval.
+- unknown sender denial for a mutation request.
+
+The 2026-07-05 verification passed 15/15 cases. Hosted Supabase smoke checks
+confirmed the expected row effects for the suite:
+
+- A scheduled visit was created for the test patient and live test
+  collaborator.
+- A pending validation visit moved to `approved_for_payment`.
+- A patient payment was inserted with the expected amount.
+- The tracked inventory item stock was updated.
+- The collaborator's assigned visit moved to `pending_validation` and received
+  a clinical note.
 
 ## Upcoming Visit Reminder
 
@@ -295,6 +408,11 @@ Mapping to the current schema:
 - Zavu inbound webhooks are active for `message.inbound` and
   `message.unsupported` events and now point to:
   `https://cbuild.app.n8n.cloud/webhook/kromed/inbound-message-agent`.
+- Provider-side verification on 2026-07-05 showed the default sender webhook is
+  active for those events and points to that URL.
+- The live inbound agent was verified with Zavu-shaped test-mode payloads,
+  including a leader voice-note transcript that updated inventory through the
+  business-operation path.
 - Voice note transcription preview works with manual transcript payloads.
   ElevenLabs Speech-to-Text is configured in n8n through the `ElevenLabs API Key`
   credential and has been validated with a generated Spanish audio sample and a
