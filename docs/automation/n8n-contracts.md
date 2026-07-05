@@ -26,10 +26,30 @@ Created in the `cbuild` n8n Cloud workspace:
   - Trigger: webhook for inbound WhatsApp audio or manual preview payloads.
   - Output: WhatsApp reply with the transcript plus an HTML preview with audio
     metadata, audio player, and transcript.
+- `Kromed - Inbound Message Agent`
+  - ID: `fBzlp8MNkVMkcNYr`
+  - Trigger: webhook for inbound Zavu WhatsApp/SMS messages.
+  - Output: safe operational response, conversation/message logs,
+    reschedule request when applicable, and automation run.
+- `Kromed - Inbound Message Agent Test Suite`
+  - ID: `eokUlIOjZgmxpYwb`
+  - Trigger: webhook for synthetic test-mode payloads.
+  - Output: pass/fail summary for scripted agent cases.
+- `Kromed - AI Supabase Tool Agent`
+  - ID: `3wj8CUGh2fJFXX0a`
+  - Trigger: webhook from the inbound message agent for safe operational
+    questions.
+  - Output: draft answer only; deterministic workflows still own side effects.
+- `Kromed - Supabase Context Tool`
+  - ID: `XQJx7vKSv3JwtJMZ`
+  - Trigger: Execute Workflow Trigger from the AI agent workflow.
+  - Output: narrow sender, conversation, and upcoming-visit context from
+    Supabase.
 
-The product workflows remain inactive until Kromed endpoints and app tokens are
-ready. The smoke test and transcription preview workflows are active for
-integration verification.
+Reminder and digest product workflows remain inactive until Kromed endpoints
+and app tokens are ready. The smoke test, transcription preview, inbound agent,
+agent test suite, AI draft workflow, and Supabase context workflow are active
+for integration verification.
 
 ## Required Environment
 
@@ -46,6 +66,8 @@ n8n credentials:
 
 - `Zavu API Bearer`
 - `ElevenLabs API Key`
+- `Kromed Supabase Service Role`
+- `Kromed OpenAI API`
 
 Kromed server environment:
 
@@ -86,6 +108,100 @@ Expected Kromed side effect:
 
 - n8n notifies Karla through Zavu.
 - Kromed records the workflow result in `public.automation_runs`.
+
+## Inbound Message Agent
+
+Zavu should eventually call the n8n webhook when the shared Kromed number
+receives an inbound WhatsApp/SMS message.
+
+Webhook path:
+
+```text
+kromed/inbound-message-agent
+```
+
+Manual test payload:
+
+```json
+{
+  "testMode": true,
+  "from": "+15555550101",
+  "channel": "whatsapp",
+  "messageType": "text",
+  "messageId": "manual-agent-test",
+  "text": "A que hora es mi proxima visita?"
+}
+```
+
+Audio payload:
+
+```json
+{
+  "testMode": true,
+  "from": "+15555550101",
+  "channel": "whatsapp",
+  "messageType": "audio",
+  "messageId": "manual-audio-test",
+  "audioUrl": "https://example.com/audio.wav"
+}
+```
+
+Expected behavior:
+
+- Normalizes the sender phone, provider message id, channel, text/audio
+  metadata, and modality.
+- Transcribes audio through ElevenLabs when an audio URL is available.
+- Resolves the sender against `patients.contact_phone`,
+  `collaborators.contact_phone`, and `profiles.phone`.
+- Uses native n8n Supabase nodes to read approved context and write
+  `conversations`, `conversation_messages`, `reschedule_requests` when
+  applicable, and `automation_runs`.
+- Calls `Kromed - AI Supabase Tool Agent` only for safe operational questions.
+- Never gives clinical advice, exposes another patient's data, finalizes
+  reschedules, or changes payment state.
+- Skips real Zavu sends when `testMode` is true.
+
+Example test-mode response:
+
+```json
+{
+  "ok": true,
+  "summary": {
+    "workflow": "inbound_message_agent",
+    "testMode": true,
+    "senderType": "patient",
+    "intent": "operational_question",
+    "action": "ai_answer_draft",
+    "modality": "text",
+    "transcriptionStatus": "not_required",
+    "requiresHuman": false,
+    "replyText": "Tu proxima visita es ..."
+  },
+  "zavuSend": "skipped_test_mode"
+}
+```
+
+## Inbound Message Agent Test Suite
+
+Webhook path:
+
+```text
+kromed/inbound-message-agent-test-suite
+```
+
+The suite sends synthetic test-mode payloads to the inbound agent and returns a
+summary with total, passed, failed, failed case names, and per-case summaries.
+
+The latest verification passed all scripted cases:
+
+- patient confirmation.
+- patient reschedule escalation.
+- patient operational question answered through AI plus Supabase context.
+- collaborator reschedule request creation.
+- unknown sender no-disclosure response.
+- clinical or emergency escalation response.
+- voice-note transcription path.
+- voice-note missing-audio-url clarification path.
 
 ## Upcoming Visit Reminder
 
@@ -172,6 +288,8 @@ Mapping to the current schema:
 - Zavu inbound webhooks are active for `message.inbound` and
   `message.unsupported` events and point to:
   `https://cbuild.app.n8n.cloud/webhook/kromed/voice-note-transcription-preview`.
+- Before production agent testing, repoint the Zavu inbound webhook to:
+  `https://cbuild.app.n8n.cloud/webhook/kromed/inbound-message-agent`.
 - Voice note transcription preview works with manual transcript payloads.
   ElevenLabs Speech-to-Text is configured in n8n through the `ElevenLabs API Key`
   credential and has been validated with a generated Spanish audio sample and a
