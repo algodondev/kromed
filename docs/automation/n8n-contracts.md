@@ -34,11 +34,11 @@ n8n variables:
 - `KARLA_PHONE`
 - `ZAVU_CHANNEL`
 - `KROMED_AUTOMATION_API_TOKEN`
-- `ELEVENLABS_API_KEY`
 
 n8n credentials:
 
 - `Zavu API Bearer`
+- `ElevenLabs API Key`
 
 Kromed server environment:
 
@@ -165,9 +165,11 @@ Mapping to the current schema:
 - Zavu inbound webhooks are active for `message.inbound` and
   `message.unsupported` events and point to:
   `https://cbuild.app.n8n.cloud/webhook/kromed/voice-note-transcription-preview`.
-- Voice note transcription preview works with manual transcript payloads. Real
-  ElevenLabs transcription requires `ELEVENLABS_API_KEY` in n8n and a Zavu
-  inbound audio payload with a downloadable `audioUrl`.
+- Voice note transcription preview works with manual transcript payloads.
+  ElevenLabs Speech-to-Text is configured in n8n through the `ElevenLabs API Key`
+  credential and has been validated with a generated Spanish audio sample. A
+  real Zavu inbound audio payload still needs to be captured to confirm the
+  downloadable audio URL field.
 - Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
   production reminders should use the open WhatsApp window or approved
   templates once available.
