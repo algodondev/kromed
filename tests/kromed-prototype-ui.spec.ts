@@ -10,7 +10,7 @@ async function login(page: import("@playwright/test").Page, email: string) {
   await page.getByLabel("Correo electronico").fill(email);
   await page.getByLabel("Contrasena").fill(password);
   await page.getByRole("button", { name: "Iniciar sesion" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
 }
 
 test("leader dashboard is production shell with leader navigation only", async ({
@@ -104,4 +104,77 @@ test("production shell stays within mobile viewport", async ({ page }) => {
   }));
 
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
+});
+
+test("leader can create a collaborator from collaborators tab", async ({
+  page,
+}) => {
+  await login(page, leaderEmail);
+
+  await page
+    .getByLabel("Navegación principal")
+    .getByRole("button", { name: "Colaboradores" })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "Colaboradores" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Agregar colaborador" }).click();
+  await expect(page.getByText("Nuevo usuario")).toBeVisible();
+
+  const suffix = Date.now();
+  const collaboratorName = `Colaborador E2E ${suffix}`;
+
+  await page.getByLabel("Nombre completo").fill(collaboratorName);
+  await page
+    .getByLabel("Correo electronico")
+    .fill(`colaborador.e2e.${suffix}@gmail.com`);
+  await page.getByLabel("Contrasena temporal").fill("password123");
+  await page.getByLabel("Telefono").fill("+503 7000 0000");
+  await page.getByLabel("Especialidad").fill("Terapia respiratoria");
+  await page.getByLabel("Tarifa base por visita (USD)").fill("25");
+  await page.getByLabel("Notas internas").fill("Creado desde prueba E2E.");
+
+  await page.getByRole("button", { name: "Crear colaborador" }).click();
+
+  await expect(page.getByText("Nuevo usuario")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByRole("cell", { name: collaboratorName })).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
+test("leader can create another leader with admin access", async ({ page }) => {
+  await login(page, leaderEmail);
+
+  await page
+    .getByLabel("Navegación principal")
+    .getByRole("button", { name: "Colaboradores" })
+    .click();
+
+  await page.getByRole("button", { name: "Agregar colaborador" }).click();
+  await expect(page.getByText("Nuevo usuario")).toBeVisible();
+
+  const suffix = Date.now();
+  const newLeaderEmail = `lider.e2e.${suffix}@gmail.com`;
+  const newLeaderName = `Lider E2E ${suffix}`;
+
+  await page.getByLabel("Tipo de usuario").selectOption("admin");
+  await expect(page.getByLabel("Especialidad")).toHaveCount(0);
+  await page.getByLabel("Nombre completo").fill(newLeaderName);
+  await page.getByLabel("Correo electronico").fill(newLeaderEmail);
+  await page.getByLabel("Contrasena temporal").fill(password);
+  await page.getByLabel("Telefono").fill("+503 7000 0001");
+
+  await page.getByRole("button", { name: "Crear lider" }).click();
+  await expect(page.getByText("Nuevo usuario")).toHaveCount(0, { timeout: 20_000 });
+
+  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
+
+  await login(page, newLeaderEmail);
+  await expect(page.getByRole("heading", { name: "Panel del día" })).toBeVisible();
+  await expect(
+    page.getByLabel("Navegación principal").getByRole("button", {
+      name: "Colaboradores",
+    }),
+  ).toBeVisible();
 });

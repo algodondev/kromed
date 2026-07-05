@@ -47,6 +47,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime, formatMoney, statusLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { CreateCollaboratorState } from "@/app/dashboard/actions";
 import type { DashboardData } from "@/lib/dashboard-data";
 
 type WorkspaceRole = "karla" | "colaborador";
@@ -399,9 +400,14 @@ function NavButton({
 }
 
 export function KromedWorkspace({
+  createCollaboratorAction,
   data,
   signOutAction,
 }: {
+  createCollaboratorAction: (
+    state: CreateCollaboratorState,
+    formData: FormData,
+  ) => Promise<CreateCollaboratorState>;
   data: DashboardData;
   signOutAction: (formData: FormData) => void | Promise<void>;
 }) {
@@ -432,6 +438,28 @@ export function KromedWorkspace({
   const [patientFilter, setPatientFilter] = React.useState("Todos");
   const [financeTab, setFinanceTab] = React.useState<FinanceTab>("income");
   const [agendaFormat, setAgendaFormat] = React.useState<AgendaFormat>("list");
+  const [showCreateCollaborator, setShowCreateCollaborator] = React.useState(false);
+  const [createUserRole, setCreateUserRole] = React.useState<"collaborator" | "admin">(
+    "collaborator",
+  );
+  const createUserClientAction = React.useCallback(
+    async (state: CreateCollaboratorState, formData: FormData) => {
+      const result = await createCollaboratorAction(state, formData);
+
+      if (result.status === "success") {
+        setShowCreateCollaborator(false);
+        setCreateUserRole("collaborator");
+      }
+
+      return result;
+    },
+    [createCollaboratorAction],
+  );
+  const [createCollaboratorState, createCollaboratorFormAction, creatingCollaborator] =
+    React.useActionState<CreateCollaboratorState, FormData>(createUserClientAction, {
+      status: "idle",
+      message: "",
+    });
 
   const collaboratorMap = React.useMemo(
     () => new Map(data.collaborators.map((collaborator) => [collaborator.id, collaborator])),
@@ -1262,11 +1290,152 @@ export function KromedWorkspace({
     return (
       <div className="flex flex-col gap-4">
         <div className="flex justify-end">
-          <Button type="button">
+          <Button
+            type="button"
+            onClick={() => setShowCreateCollaborator((current) => !current)}
+          >
             <PlusIcon data-icon="inline-start" />
-            Agregar colaborador
+            {showCreateCollaborator ? "Cerrar formulario" : "Agregar colaborador"}
           </Button>
         </div>
+        {showCreateCollaborator ? (
+          <Panel
+            description="El lider puede crear usuarios lider o colaborador. Los lideres quedan con rol admin; los colaboradores tambien aparecen en esta lista."
+            title="Nuevo usuario"
+          >
+            <form
+              action={createCollaboratorFormAction}
+              className="grid gap-4"
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="user-role">Tipo de usuario</Label>
+                  <select
+                    className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                    id="user-role"
+                    name="userRole"
+                    value={createUserRole}
+                    onChange={(event) =>
+                      setCreateUserRole(
+                        event.currentTarget.value === "admin" ? "admin" : "collaborator",
+                      )
+                    }
+                  >
+                    <option value="collaborator">Colaborador</option>
+                    <option value="admin">Líder</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="collaborator-name">Nombre completo</Label>
+                  <Input
+                    autoComplete="name"
+                    id="collaborator-name"
+                    name="name"
+                    placeholder="Nombre del colaborador"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="collaborator-email">Correo electronico</Label>
+                  <Input
+                    autoComplete="email"
+                    id="collaborator-email"
+                    name="email"
+                    placeholder="colaborador@kromed.com"
+                    required
+                    type="email"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="collaborator-password">Contrasena temporal</Label>
+                  <Input
+                    autoComplete="new-password"
+                    id="collaborator-password"
+                    minLength={6}
+                    name="password"
+                    placeholder="Minimo 6 caracteres"
+                    required
+                    type="password"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="collaborator-phone">Telefono</Label>
+                  <Input
+                    autoComplete="tel"
+                    id="collaborator-phone"
+                    name="phone"
+                    placeholder="+503 0000 0000"
+                    type="tel"
+                  />
+                </div>
+                {createUserRole === "collaborator" ? (
+                  <>
+                    <div className="grid gap-2">
+                      <Label htmlFor="collaborator-profession">Especialidad</Label>
+                      <Input
+                        id="collaborator-profession"
+                        name="profession"
+                        placeholder="Terapia respiratoria, enfermeria..."
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="collaborator-default-payout">
+                        Tarifa base por visita (USD)
+                      </Label>
+                      <Input
+                        id="collaborator-default-payout"
+                        min="0"
+                        name="defaultPayout"
+                        placeholder="25.00"
+                        step="0.01"
+                        type="number"
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+              {createUserRole === "collaborator" ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="collaborator-notes">Notas internas</Label>
+                  <Textarea
+                    id="collaborator-notes"
+                    name="notes"
+                    placeholder="Disponibilidad, zona de cobertura o indicaciones administrativas"
+                  />
+                </div>
+              ) : null}
+
+              {createCollaboratorState.status === "error" &&
+              createCollaboratorState.message ? (
+                <p
+                  aria-live="polite"
+                  className="rounded-[10px] border border-[var(--red)] bg-[var(--red-light)] px-3 py-2 text-sm font-semibold text-[var(--red)]"
+                >
+                  {createCollaboratorState.message}
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  disabled={creatingCollaborator}
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowCreateCollaborator(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button disabled={creatingCollaborator} type="submit">
+                  <UserPlusIcon data-icon="inline-start" />
+                  {creatingCollaborator
+                    ? "Creando..."
+                    : createUserRole === "admin"
+                      ? "Crear lider"
+                      : "Crear colaborador"}
+                </Button>
+              </div>
+            </form>
+          </Panel>
+        ) : null}
         <Panel>
           <Table>
             <TableHeader>
