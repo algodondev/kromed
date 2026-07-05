@@ -20,7 +20,8 @@ Created in the `cbuild` n8n Cloud workspace:
 - `Kromed - WhatsApp Voice Note Transcription Preview`
   - ID: `nuO6rBXYCgSule36`
   - Trigger: webhook for inbound WhatsApp audio or manual preview payloads.
-  - Output: HTML preview with audio metadata, audio player, and transcript.
+  - Output: WhatsApp reply with the transcript plus an HTML preview with audio
+    metadata, audio player, and transcript.
 
 The product workflows remain inactive until Kromed endpoints and app tokens are
 ready. The smoke test and transcription preview workflows are active for
@@ -195,7 +196,8 @@ Manual preview payload:
 ```
 
 The workflow returns an HTML page showing the sender, channel, message id, audio
-player, and transcript. Once ElevenLabs is configured, the workflow can use
+player, and transcript. It also replies to the WhatsApp sender with the
+transcription using Zavu. ElevenLabs uses
 `POST https://api.elevenlabs.io/v1/speech-to-text` with model `scribe_v2` and
 `source_url` for automatic transcription.
 
@@ -223,4 +225,21 @@ Verified transcription:
 
 ```text
 Paciente toleró la terapia sin complicaciones. A continuar ejercicios respiratorios
+```
+
+Verified WhatsApp transcription reply:
+
+```text
+Transcripcion Kromed:
+
+Paciente toleró la terapia sin complicaciones. A continuar ejercicios respiratorios
+
+Revisa esta nota antes de guardarla en el expediente.
+```
+
+Zavu reply message:
+
+```text
+jx77mryma5hf7twat40trecbjx89yyf3
+status: delivered
 ```
