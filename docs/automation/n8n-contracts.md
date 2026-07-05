@@ -14,6 +14,23 @@ Created in the `cbuild` n8n Cloud workspace:
 - `Kromed - Upcoming Visit Reminder`
   - ID: `LyF0lSy3xCdaqTtf`
   - Trigger: schedule every 15 minutes.
+- `Kromed - Pending Validation Digest`
+  - ID: `xmPXh8mi1kEwDzaS`
+  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Output: Karla WhatsApp digest plus `automation_runs` log call.
+- `Kromed - Reschedule Request Notification`
+  - ID: `X920NGGJKRpQoYzB`
+  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Output: Karla WhatsApp digest plus `automation_runs` log call.
+- `Kromed - Payout Draft Digest`
+  - ID: `c42tYeyiRsaCOsnS`
+  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Output: Karla WhatsApp payout summary plus `automation_runs` log call.
+- `Kromed - Monthly Summary Digest`
+  - ID: `4uZkZIE5b2uDLIJX`
+  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Output: Karla WhatsApp monthly operations summary plus `automation_runs`
+    log call.
 - `Kromed - Zavu WhatsApp Smoke Test`
   - ID: `ooULHOx2xvRKHUVH`
   - Trigger: webhook for verifying n8n can send WhatsApp through Zavu.
@@ -55,7 +72,10 @@ Created in the `cbuild` n8n Cloud workspace:
 Reminder and digest product workflows remain inactive until Kromed endpoints
 and app tokens are ready. The smoke test, transcription preview, inbound agent,
 agent test suite, AI draft workflow, Supabase context workflow, and business
-operations workflow are active for integration verification.
+operations workflow are active for integration verification. The Business
+Operations Tool has retry-on-fail enabled on its Supabase nodes, but recent
+non-mutating smoke tests still timed out around the `Get operation visits`
+step, so it needs further performance or query narrowing before demo reliance.
 
 ## Required Environment
 
@@ -282,6 +302,10 @@ Implementation notes:
   deterministic.
 - Voice notes with a transcript use the same operation path as written
   messages.
+- On 2026-07-05, 12 Supabase nodes were configured with retry-on-fail
+  behavior. A safe unknown-sender mutation denial test still timed out before
+  a webhook response, and the latest recorded error remained a Supabase timeout
+  at `Get operation visits`.
 
 ## Inbound Message Agent Test Suite
 
@@ -403,6 +427,8 @@ Mapping to the current schema:
 
 - `KROMED_APP_URL` in n8n is still a placeholder.
 - `KROMED_AUTOMATION_API_TOKEN` must be configured in both Kromed and n8n.
+- Endpoint-backed admin digest workflows exist, but remain inactive until the
+  URL and token are configured.
 - Zavu WhatsApp has been verified from n8n. Smoke test message
   `jx75tyeq0ne64p5q29kaegf3yd89z2a8` was delivered to `+50375419727`.
 - Zavu inbound webhooks are active for `message.inbound` and
@@ -448,6 +474,95 @@ The `Kromed - Upcoming Visit Reminder` workflow is configured to send this
 template through Zavu using `ZAVU_REMINDER_TEMPLATE_ID`. It should remain
 inactive until the template status is `approved` and Kromed automation endpoints
 exist.
+
+## Admin Digest Workflows
+
+These workflows are created in n8n but remain inactive until `KROMED_APP_URL`
+points to the deployed Kromed app and `KROMED_AUTOMATION_API_TOKEN` is set in
+both n8n and the app server.
+
+### Pending Validation Digest
+
+Webhook path:
+
+```text
+kromed/pending-validation-digest
+```
+
+Reads:
+
+```text
+GET /api/automation/visits/pending-validation
+```
+
+Behavior:
+
+- Builds a WhatsApp digest for Karla with pending validation count and the
+  first pending visits.
+- Sends the digest through Zavu.
+- Logs the workflow through `POST /api/automation/runs`.
+
+### Reschedule Request Notification
+
+Webhook path:
+
+```text
+kromed/reschedule-request-notification
+```
+
+Reads:
+
+```text
+GET /api/automation/reschedule-requests/pending
+```
+
+Behavior:
+
+- Builds a WhatsApp digest for Karla with pending reschedule requests.
+- Sends the digest through Zavu.
+- Logs the workflow through `POST /api/automation/runs`.
+
+### Payout Draft Digest
+
+Webhook path:
+
+```text
+kromed/payout-draft-digest
+```
+
+Reads:
+
+```text
+GET /api/automation/payouts/draft
+```
+
+Behavior:
+
+- Summarizes visits approved for collaborator payout.
+- Sends Karla the total payout amount and a collaborator preview.
+- Logs the workflow through `POST /api/automation/runs`.
+
+### Monthly Summary Digest
+
+Webhook path:
+
+```text
+kromed/monthly-summary-digest
+```
+
+Reads:
+
+```text
+GET /api/automation/reports/monthly-summary
+```
+
+Behavior:
+
+- Summarizes current-month visits, pending validations, approved payout visits,
+  patient charges, received payments, collaborator payouts, and automation run
+  success counts.
+- Sends the summary to Karla through Zavu.
+- Logs the workflow through `POST /api/automation/runs`.
 
 ## Voice Note Transcription Preview
 
