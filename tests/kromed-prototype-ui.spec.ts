@@ -232,6 +232,83 @@ test("leader can schedule a visit and see it in validation", async ({ page }) =>
   }
 });
 
+test("calendar filters collaborators and shows saved scheduled visits", async ({
+  page,
+}) => {
+  let visitNotes = "";
+
+  try {
+    await login(page, leaderEmail);
+
+    await page
+      .getByLabel("Navegación principal")
+      .getByRole("button", { name: "Agendar visita" })
+      .click();
+
+    const collaborator = await page
+      .getByLabel("Colaborador del equipo")
+      .evaluate((select) => {
+        const options = Array.from((select as HTMLSelectElement).options);
+        const option = options.at(-1);
+
+        return {
+          count: options.length,
+          id: option?.value ?? "",
+          name: option?.textContent?.trim() ?? "",
+        };
+      });
+
+    expect(collaborator.count).toBeGreaterThan(0);
+    expect(collaborator.id).not.toBe("");
+
+    visitNotes = `Calendario E2E ${Date.now()}`;
+
+    await page.getByLabel("Paciente", { exact: true }).selectOption({ index: 0 });
+    await page.getByLabel("Colaborador del equipo").selectOption(collaborator.id);
+    await page.getByLabel("Fecha").fill("2026-07-09");
+    await page.getByLabel("Hora").fill("10:45");
+    await page.getByLabel("Precio al paciente").fill("50");
+    await page.getByLabel("Pago al colaborador").fill("30");
+    await page.getByLabel("Notas internas").fill(visitNotes);
+
+    await page
+      .getByTestId("schedule-visit-card")
+      .getByRole("button", { name: "Agendar visita" })
+      .click();
+
+    await expect(
+      page.getByRole("heading", { name: "Validación de visitas" }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await page
+      .getByLabel("Navegación principal")
+      .getByRole("button", { name: "Calendario" })
+      .click();
+
+    await expect(
+      page.getByRole("heading", { name: "Calendario inteligente" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("calendar-collaborator-filter")).toBeVisible();
+
+    await page.getByTestId("calendar-collaborator-filter").selectOption(collaborator.id);
+
+    await expect(page.getByTestId(`calendar-column-${collaborator.id}`)).toBeVisible();
+    await expect(page.getByText(visitNotes)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Semana" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Día" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Mes" })).toHaveCount(0);
+
+    await page.getByTestId("calendar-collaborator-filter").selectOption("all");
+    await expect(page.locator('[data-testid^="calendar-column-"]')).toHaveCount(
+      Math.min(collaborator.count, 4),
+    );
+  } finally {
+    if (visitNotes) {
+      await deleteVisitByNotes(visitNotes);
+    }
+  }
+});
+
 test("leader can create a collaborator from collaborators tab", async ({
   page,
 }) => {

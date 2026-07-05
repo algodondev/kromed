@@ -201,6 +201,50 @@ function formatTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function timeSlotKey(value: string | null | undefined) {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${hours}:${minutes}`;
+}
+
+function compareTimeSlots(left: string, right: string) {
+  return left.localeCompare(right);
+}
+
+function formatTimeSlot(slot: string) {
+  const [hours = "00", minutes = "00"] = slot.split(":");
+  const date = new Date();
+
+  date.setHours(Number(hours), Number(minutes), 0, 0);
+
+  return formatTime(date.toISOString());
+}
+
+function startOfDay(value: Date) {
+  const date = new Date(value);
+
+  date.setHours(0, 0, 0, 0);
+
+  return date;
+}
+
+function isSameCalendarDay(value: string | null | undefined, anchor: Date) {
+  if (!value) return false;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return false;
+
+  return startOfDay(date).getTime() === startOfDay(anchor).getTime();
+}
+
 function formatTimeRange(start: string | null | undefined, end: string | null | undefined) {
   return `${formatTime(start)} - ${formatTime(end)}`;
 }
@@ -456,6 +500,7 @@ export function KromedWorkspace({
   );
   const [patientTab, setPatientTab] = React.useState<PatientTab>("info");
   const [patientFilter, setPatientFilter] = React.useState("Todos");
+  const [calendarCollaboratorFilter, setCalendarCollaboratorFilter] = React.useState("all");
   const [financeTab, setFinanceTab] = React.useState<FinanceTab>("income");
   const [agendaFormat, setAgendaFormat] = React.useState<AgendaFormat>("list");
   const [showCreateCollaborator, setShowCreateCollaborator] = React.useState(false);
@@ -812,46 +857,93 @@ export function KromedWorkspace({
   }
 
   function renderCalendar() {
-    const columns = data.collaborators.slice(0, 4);
+    const selectedCalendarCollaborator =
+      calendarCollaboratorFilter === "all"
+        ? null
+        : data.collaborators.find(
+            (collaborator) => collaborator.id === calendarCollaboratorFilter,
+          ) ?? null;
+    const collaboratorHasCalendarItem = (collaboratorId: string) =>
+      visits.some((visit) => visit.collaborator_id === collaboratorId) ||
+      hospitalShifts.some((shift) => shift.collaborator_id === collaboratorId);
+    const columns = selectedCalendarCollaborator
+      ? [selectedCalendarCollaborator]
+      : [...data.collaborators]
+          .sort((left, right) => {
+            const rightHasItem = collaboratorHasCalendarItem(right.id) ? 1 : 0;
+            const leftHasItem = collaboratorHasCalendarItem(left.id) ? 1 : 0;
+
+            return rightHasItem - leftHasItem || left.name.localeCompare(right.name);
+          })
+          .slice(0, 4);
+    const visibleCollaboratorIds = new Set(columns.map((collaborator) => collaborator.id));
+    const collaboratorVisits = visits.filter((visit) =>
+      visibleCollaboratorIds.has(visit.collaborator_id),
+    );
+    const collaboratorHospitalShifts = hospitalShifts.filter((shift) =>
+      visibleCollaboratorIds.has(shift.collaborator_id),
+    );
+    const calendarDates = [
+      ...collaboratorVisits.map((visit) => ({
+        createdAt: new Date(visit.created_at).getTime(),
+        scheduledAt: new Date(visit.scheduled_start),
+      })),
+      ...collaboratorHospitalShifts.map((shift) => ({
+        createdAt: new Date(shift.created_at).getTime(),
+        scheduledAt: new Date(shift.starts_at),
+      })),
+    ]
+      .filter((item) => !Number.isNaN(item.scheduledAt.getTime()))
+      .sort((left, right) => {
+        const rightCreatedAt = Number.isNaN(right.createdAt) ? 0 : right.createdAt;
+        const leftCreatedAt = Number.isNaN(left.createdAt) ? 0 : left.createdAt;
+
+        return rightCreatedAt - leftCreatedAt || right.scheduledAt.getTime() - left.scheduledAt.getTime();
+      });
+    const today = startOfDay(new Date());
+    const calendarAnchorDate =
+      calendarDates[0]?.scheduledAt ??
+      calendarDates.find((item) => item.scheduledAt >= today)?.scheduledAt ??
+      new Date();
+    const visibleVisits = collaboratorVisits.filter((visit) =>
+      isSameCalendarDay(visit.scheduled_start, calendarAnchorDate),
+    );
+    const visibleHospitalShifts = collaboratorHospitalShifts.filter((shift) =>
+      isSameCalendarDay(shift.starts_at, calendarAnchorDate),
+    );
     const slots = Array.from(
       new Set(
-        [...visits.map((visit) => formatTime(visit.scheduled_start)), "8:00 a. m.", "12:00 p. m."]
-          .filter(Boolean)
-          .slice(0, 6),
+        [
+          ...visibleVisits.map((visit) => timeSlotKey(visit.scheduled_start)),
+          ...visibleHospitalShifts.map((shift) => timeSlotKey(shift.starts_at)),
+          "08:00",
+          "12:00",
+        ].filter((slot): slot is string => Boolean(slot)),
       ),
-    );
+    ).sort(compareTimeSlots);
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            {["Todos", ...columns.map((collaborator) => collaborator.name)].map((item, index) => (
-              <Badge
-                className={cn(
-                  "rounded-full px-3 py-1",
-                  index === 0
-                    ? "bg-[var(--primary-dark)] text-white"
-                    : "bg-white text-[var(--ink-soft)]",
-                )}
-                key={item}
-                variant="secondary"
-              >
-                {item}
-              </Badge>
-            ))}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid w-full max-w-xs gap-1.5">
+            <Label htmlFor="calendar-collaborator-filter">Colaborador</Label>
+            <select
+              className="h-9 rounded-lg border border-input bg-white px-2.5 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+              data-testid="calendar-collaborator-filter"
+              id="calendar-collaborator-filter"
+              value={calendarCollaboratorFilter}
+              onChange={(event) => setCalendarCollaboratorFilter(event.currentTarget.value)}
+            >
+              <option value="all">Todos</option>
+              {data.collaborators.map((collaborator) => (
+                <option key={collaborator.id} value={collaborator.id}>
+                  {collaborator.name}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="flex rounded-lg bg-white p-1 ring-1 ring-[var(--line)]">
-            {["Semana", "Día", "Mes"].map((item, index) => (
-              <Button
-                className={cn(index === 0 && "bg-[var(--primary-light)] text-[var(--primary-darker)]")}
-                key={item}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {item}
-              </Button>
-            ))}
+          <div className="rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[var(--ink-soft)]">
+            Día: {formatDate(calendarAnchorDate.toISOString())}
           </div>
         </div>
 
@@ -864,7 +956,11 @@ export function KromedWorkspace({
           >
             <div className="p-3" />
             {columns.map((collaborator) => (
-              <div className="p-3 text-sm font-bold text-[var(--ink)]" key={collaborator.id}>
+              <div
+                className="p-3 text-sm font-bold text-[var(--ink)]"
+                data-testid={`calendar-column-${collaborator.id}`}
+                key={collaborator.id}
+              >
                 {collaborator.name}
               </div>
             ))}
@@ -878,18 +974,18 @@ export function KromedWorkspace({
             {slots.map((slot) => (
               <React.Fragment key={slot}>
                 <div className="border-b border-r border-[var(--line)] p-3 text-xs font-bold text-[var(--ink-soft)]">
-                  {slot}
+                  {formatTimeSlot(slot)}
                 </div>
                 {columns.map((collaborator) => {
-                  const visit = visits.find(
+                  const cellVisits = visibleVisits.filter(
                     (item) =>
                       item.collaborator_id === collaborator.id &&
-                      formatTime(item.scheduled_start) === slot,
+                      timeSlotKey(item.scheduled_start) === slot,
                   );
-                  const shift = hospitalShifts.find(
+                  const shift = visibleHospitalShifts.find(
                     (item) =>
                       item.collaborator_id === collaborator.id &&
-                      formatTime(item.starts_at) === slot,
+                      timeSlotKey(item.starts_at) === slot,
                   );
 
                   return (
@@ -897,32 +993,42 @@ export function KromedWorkspace({
                       className="min-h-24 border-b border-r border-[var(--line)] p-2"
                       key={`${slot}-${collaborator.id}`}
                     >
-                      {visit ? (
-                        <button
-                          className={cn(
-                            "w-full rounded-[10px] border p-3 text-left text-xs font-semibold",
-                            visit.status === "completed"
-                              ? "border-[var(--secondary-line)] bg-[var(--secondary-light)] text-[var(--secondary-dark)]"
-                              : "border-[var(--primary-line)] bg-[var(--primary-light)] text-[var(--primary-darker)]",
-                          )}
-                          onClick={() => goToView("patientDetail", visit.patient_id)}
-                          type="button"
-                        >
-                          {visit.patients?.full_name ??
-                            patientMap.get(visit.patient_id)?.full_name ??
-                            "Paciente"}
-                          <span className="mt-1 block font-normal">
-                            {statusLabel(visit.status)}
-                          </span>
-                        </button>
-                      ) : shift ? (
-                        <div className="rounded-[10px] border border-[var(--amber)] bg-[var(--amber-light)] p-3 text-xs font-semibold text-[var(--amber)]">
-                          {shift.shift_codes?.code ?? shift.source_label ?? "Turno hospital"}
-                          <span className="mt-1 block font-normal">
-                            {formatTimeRange(shift.starts_at, shift.ends_at)}
-                          </span>
-                        </div>
-                      ) : null}
+                      <div className="grid gap-2">
+                        {cellVisits.map((visit) => (
+                          <button
+                            className={cn(
+                              "w-full rounded-[10px] border p-3 text-left text-xs font-semibold",
+                              visit.status === "completed"
+                                ? "border-[var(--secondary-line)] bg-[var(--secondary-light)] text-[var(--secondary-dark)]"
+                                : "border-[var(--primary-line)] bg-[var(--primary-light)] text-[var(--primary-darker)]",
+                            )}
+                            key={visit.id}
+                            type="button"
+                            onClick={() => goToView("patientDetail", visit.patient_id)}
+                          >
+                            {visit.patients?.full_name ??
+                              patientMap.get(visit.patient_id)?.full_name ??
+                              "Paciente"}
+                            <span className="mt-1 block font-normal">
+                              {formatDate(visit.scheduled_start)} ·{" "}
+                              {statusLabel(visit.status)}
+                            </span>
+                            {visit.notes ? (
+                              <span className="mt-1 block font-normal text-[var(--primary-darker)]">
+                                {visit.notes}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                        {shift ? (
+                          <div className="rounded-[10px] border border-[var(--amber)] bg-[var(--amber-light)] p-3 text-xs font-semibold text-[var(--amber)]">
+                            {shift.shift_codes?.code ?? shift.source_label ?? "Turno hospital"}
+                            <span className="mt-1 block font-normal">
+                              {formatTimeRange(shift.starts_at, shift.ends_at)}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })}
@@ -930,11 +1036,6 @@ export function KromedWorkspace({
             ))}
           </div>
         </div>
-
-        <EmptyNote tone="amber" icon={LockIcon}>
-          La validación automática de disponibilidad queda limitada por la información
-          visible con el rol actual. La lógica de conflictos debe vivir en el backend.
-        </EmptyNote>
       </div>
     );
   }
