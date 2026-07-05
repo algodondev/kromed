@@ -47,7 +47,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime, formatMoney, statusLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CreateCollaboratorState } from "@/app/dashboard/actions";
+import type {
+  CreateCollaboratorState,
+  CreateInventoryOrEquipmentState,
+  CreateShiftCodeState,
+  CreateVisitState,
+} from "@/app/dashboard/actions";
 import type { DashboardData } from "@/lib/dashboard-data";
 
 type WorkspaceRole = "karla" | "colaborador";
@@ -130,7 +135,7 @@ const leaderNav: Array<NavItem | { label: string }> = [
   { view: "validation", label: "Validación de visitas", icon: CheckCircle2Icon },
   { label: "Configuración" },
   { view: "supplies", label: "Insumos e inventario", icon: BoxesIcon },
-  { view: "shiftCodes", label: "Códigos de turno", icon: Code2Icon },
+  { view: "shiftCodes", label: "Códigos de visita", icon: Code2Icon },
   { label: "Finanzas" },
   { view: "finance", label: "Pagos y cobros", icon: WalletCardsIcon },
   { view: "reports", label: "Reportes", icon: FileTextIcon },
@@ -151,7 +156,7 @@ const pageMeta: Record<View, [string, string]> = {
   collaborators: ["Colaboradores", "Equipo de profesionales externos"],
   validation: ["Validación de visitas", "Confirma quién realizó la visita antes de aprobarla para pago"],
   supplies: ["Insumos e inventario", "Catálogo operativo conectado al inventario"],
-  shiftCodes: ["Códigos de turno", "Editables según hospital o institución"],
+  shiftCodes: ["Códigos de visita", "Editables según hospital o institución"],
   finance: ["Pagos y cobros", "Desglose de ingresos por paciente y pagos por colaborador"],
   reports: ["Reportes", "Reportes por paciente, finanzas y colaborador"],
   myAgenda: ["Mi agenda", "Portal de colaborador"],
@@ -401,6 +406,9 @@ function NavButton({
 
 export function KromedWorkspace({
   createCollaboratorAction,
+  createInventoryOrEquipmentAction,
+  createShiftCodeAction,
+  createVisitAction,
   data,
   signOutAction,
 }: {
@@ -408,6 +416,18 @@ export function KromedWorkspace({
     state: CreateCollaboratorState,
     formData: FormData,
   ) => Promise<CreateCollaboratorState>;
+  createInventoryOrEquipmentAction: (
+    state: CreateInventoryOrEquipmentState,
+    formData: FormData,
+  ) => Promise<CreateInventoryOrEquipmentState>;
+  createShiftCodeAction: (
+    state: CreateShiftCodeState,
+    formData: FormData,
+  ) => Promise<CreateShiftCodeState>;
+  createVisitAction: (
+    state: CreateVisitState,
+    formData: FormData,
+  ) => Promise<CreateVisitState>;
   data: DashboardData;
   signOutAction: (formData: FormData) => void | Promise<void>;
 }) {
@@ -439,6 +459,11 @@ export function KromedWorkspace({
   const [financeTab, setFinanceTab] = React.useState<FinanceTab>("income");
   const [agendaFormat, setAgendaFormat] = React.useState<AgendaFormat>("list");
   const [showCreateCollaborator, setShowCreateCollaborator] = React.useState(false);
+  const [showCreateInventory, setShowCreateInventory] = React.useState(false);
+  const [showCreateShiftCode, setShowCreateShiftCode] = React.useState(false);
+  const [inventoryFormType, setInventoryFormType] = React.useState<"supply" | "equipment">(
+    "supply",
+  );
   const [createUserRole, setCreateUserRole] = React.useState<"collaborator" | "admin">(
     "collaborator",
   );
@@ -460,6 +485,64 @@ export function KromedWorkspace({
       status: "idle",
       message: "",
     });
+  const createVisitClientAction = React.useCallback(
+    async (state: CreateVisitState, formData: FormData) => {
+      const result = await createVisitAction(state, formData);
+
+      if (result.status === "success") {
+        setView("validation");
+      }
+
+      return result;
+    },
+    [createVisitAction],
+  );
+  const [createVisitState, createVisitFormAction, creatingVisit] =
+    React.useActionState<CreateVisitState, FormData>(createVisitClientAction, {
+      status: "idle",
+      message: "",
+    });
+  const createShiftCodeClientAction = React.useCallback(
+    async (state: CreateShiftCodeState, formData: FormData) => {
+      const result = await createShiftCodeAction(state, formData);
+
+      if (result.status === "success") {
+        setShowCreateShiftCode(false);
+      }
+
+      return result;
+    },
+    [createShiftCodeAction],
+  );
+  const [createShiftCodeState, createShiftCodeFormAction, creatingShiftCode] =
+    React.useActionState<CreateShiftCodeState, FormData>(createShiftCodeClientAction, {
+      status: "idle",
+      message: "",
+    });
+  const createInventoryClientAction = React.useCallback(
+    async (state: CreateInventoryOrEquipmentState, formData: FormData) => {
+      const result = await createInventoryOrEquipmentAction(state, formData);
+
+      if (result.status === "success") {
+        setShowCreateInventory(false);
+        setInventoryFormType("supply");
+      }
+
+      return result;
+    },
+    [createInventoryOrEquipmentAction],
+  );
+  const [
+    createInventoryState,
+    createInventoryFormAction,
+    creatingInventoryItem,
+  ] = React.useActionState<CreateInventoryOrEquipmentState, FormData>(
+    createInventoryClientAction,
+    {
+      status: "idle",
+      message: "",
+    },
+  );
 
   const collaboratorMap = React.useMemo(
     () => new Map(data.collaborators.map((collaborator) => [collaborator.id, collaborator])),
@@ -1212,77 +1295,130 @@ export function KromedWorkspace({
 
   function renderScheduleVisit() {
     return (
-      <Panel className="max-w-2xl" title="Nueva visita">
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="patient">Paciente</Label>
-            <select
-              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              id="patient"
-              defaultValue={data.patients[0]?.id}
-            >
-              {data.patients.map((patient) => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="collaborator">Colaborador del equipo</Label>
-            <select
-              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              id="collaborator"
-              defaultValue={data.collaborators[0]?.id}
-            >
-              {data.collaborators.map((collaborator) => (
-                <option key={collaborator.id} value={collaborator.id}>
-                  {collaborator.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-[var(--ink-soft)]">
-              La asignación definitiva debe validar equipo y disponibilidad en Supabase.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex justify-center" data-testid="schedule-visit-panel">
+        <div className="w-full max-w-2xl" data-testid="schedule-visit-card">
+        <Panel className="w-full" title="Nueva visita">
+          <form action={createVisitFormAction} className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="date">Fecha</Label>
-              <Input id="date" type="date" />
+              <Label htmlFor="patient">Paciente</Label>
+              <select
+                className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                defaultValue={data.patients[0]?.id ?? ""}
+                disabled={!data.patients.length || creatingVisit}
+                id="patient"
+                name="patientId"
+                required
+              >
+                {data.patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="time">Hora</Label>
-              <Input id="time" type="time" />
+              <Label htmlFor="collaborator">Colaborador del equipo</Label>
+              <select
+                className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                defaultValue={data.collaborators[0]?.id ?? ""}
+                disabled={!data.collaborators.length || creatingVisit}
+                id="collaborator"
+                name="collaboratorId"
+                required
+              >
+                {data.collaborators.map((collaborator) => (
+                  <option key={collaborator.id} value={collaborator.id}>
+                    {collaborator.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-[var(--ink-soft)]">
+                La asignación definitiva debe validar equipo y disponibilidad en Supabase.
+              </p>
             </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="date">Fecha</Label>
+                <Input disabled={creatingVisit} id="date" name="date" required type="date" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="time">Hora</Label>
+                <Input disabled={creatingVisit} id="time" name="time" required type="time" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="patient-price">Precio al paciente</Label>
+                <Input
+                  disabled={creatingVisit}
+                  id="patient-price"
+                  min="0"
+                  name="patientCharge"
+                  placeholder="$ 0.00"
+                  step="0.01"
+                  type="number"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="collaborator-pay">Pago al colaborador</Label>
+                <Input
+                  disabled={creatingVisit}
+                  id="collaborator-pay"
+                  min="0"
+                  name="collaboratorPayout"
+                  placeholder="$ 0.00"
+                  step="0.01"
+                  type="number"
+                />
+              </div>
+            </div>
             <div className="grid gap-2">
-              <Label htmlFor="patient-price">Precio al paciente</Label>
-              <Input id="patient-price" placeholder="$ 0.00" type="number" />
+              <Label htmlFor="visit-notes">Notas internas</Label>
+              <Textarea
+                disabled={creatingVisit}
+                id="visit-notes"
+                name="notes"
+                placeholder="Indicaciones para el colaborador o contexto operativo"
+              />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="collaborator-pay">Pago al colaborador</Label>
-              <Input id="collaborator-pay" placeholder="$ 0.00" type="number" />
+
+            {createVisitState.message ? (
+              <p
+                aria-live="polite"
+                className={cn(
+                  "rounded-[10px] border px-3 py-2 text-sm font-semibold",
+                  createVisitState.status === "error"
+                    ? "border-[var(--red)] bg-[var(--red-light)] text-[var(--red)]"
+                    : "border-[var(--green)] bg-[var(--green-light)] text-[var(--green)]",
+                )}
+              >
+                {createVisitState.message}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={creatingVisit}
+                onClick={() => goToView("patients")}
+                type="button"
+                variant="outline"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={
+                  creatingVisit || !data.patients.length || !data.collaborators.length
+                }
+                type="submit"
+              >
+                <CalendarDaysIcon data-icon="inline-start" />
+                {creatingVisit ? "Agendando..." : "Agendar visita"}
+              </Button>
             </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="visit-notes">Notas internas</Label>
-            <Textarea
-              id="visit-notes"
-              placeholder="Indicaciones para el colaborador o contexto operativo"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => goToView("patients")} type="button" variant="outline">
-              Cancelar
-            </Button>
-            <Button type="button">
-              <CalendarDaysIcon data-icon="inline-start" />
-              Agendar visita
-            </Button>
-          </div>
+          </form>
+        </Panel>
         </div>
-      </Panel>
+      </div>
     );
   }
 
@@ -1292,149 +1428,166 @@ export function KromedWorkspace({
         <div className="flex justify-end">
           <Button
             type="button"
-            onClick={() => setShowCreateCollaborator((current) => !current)}
+            onClick={() => setShowCreateCollaborator(true)}
           >
             <PlusIcon data-icon="inline-start" />
-            {showCreateCollaborator ? "Cerrar formulario" : "Agregar colaborador"}
+            Agregar colaborador
           </Button>
         </div>
         {showCreateCollaborator ? (
-          <Panel
-            description="El lider puede crear usuarios lider o colaborador. Los lideres quedan con rol admin; los colaboradores tambien aparecen en esta lista."
-            title="Nuevo usuario"
+          <div
+            aria-labelledby="new-user-title"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(15,23,42,.42)] px-4 py-8 backdrop-blur-sm"
+            role="dialog"
           >
-            <form
-              action={createCollaboratorFormAction}
-              className="grid gap-4"
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="user-role">Tipo de usuario</Label>
-                  <select
-                    className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
-                    id="user-role"
-                    name="userRole"
-                    value={createUserRole}
-                    onChange={(event) =>
-                      setCreateUserRole(
-                        event.currentTarget.value === "admin" ? "admin" : "collaborator",
-                      )
-                    }
-                  >
-                    <option value="collaborator">Colaborador</option>
-                    <option value="admin">Líder</option>
-                  </select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="collaborator-name">Nombre completo</Label>
-                  <Input
-                    autoComplete="name"
-                    id="collaborator-name"
-                    name="name"
-                    placeholder="Nombre del colaborador"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="collaborator-email">Correo electronico</Label>
-                  <Input
-                    autoComplete="email"
-                    id="collaborator-email"
-                    name="email"
-                    placeholder="colaborador@kromed.com"
-                    required
-                    type="email"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="collaborator-password">Contrasena temporal</Label>
-                  <Input
-                    autoComplete="new-password"
-                    id="collaborator-password"
-                    minLength={6}
-                    name="password"
-                    placeholder="Minimo 6 caracteres"
-                    required
-                    type="password"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="collaborator-phone">Telefono</Label>
-                  <Input
-                    autoComplete="tel"
-                    id="collaborator-phone"
-                    name="phone"
-                    placeholder="+503 0000 0000"
-                    type="tel"
-                  />
+            <div className="w-full max-w-3xl rounded-[18px] border border-[var(--line)] bg-white shadow-[0_24px_80px_rgba(38,49,63,.22)]">
+              <div className="border-b border-[var(--line)] px-5 py-4">
+                <h2
+                  className="font-[var(--font-heading)] text-xl font-extrabold text-[var(--ink)]"
+                  id="new-user-title"
+                >
+                  Nuevo usuario
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                  El lider puede crear usuarios lider o colaborador. Los
+                  lideres quedan con rol admin; los colaboradores tambien
+                  aparecen en esta lista.
+                </p>
+              </div>
+              <form
+                action={createCollaboratorFormAction}
+                className="grid gap-4 p-5"
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="user-role">Tipo de usuario</Label>
+                    <select
+                      className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                      id="user-role"
+                      name="userRole"
+                      value={createUserRole}
+                      onChange={(event) =>
+                        setCreateUserRole(
+                          event.currentTarget.value === "admin" ? "admin" : "collaborator",
+                        )
+                      }
+                    >
+                      <option value="collaborator">Colaborador</option>
+                      <option value="admin">Líder</option>
+                    </select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-name">Nombre completo</Label>
+                    <Input
+                      autoComplete="name"
+                      id="collaborator-name"
+                      name="name"
+                      placeholder="Nombre del colaborador"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-email">Correo electronico</Label>
+                    <Input
+                      autoComplete="email"
+                      id="collaborator-email"
+                      name="email"
+                      placeholder="colaborador@kromed.com"
+                      required
+                      type="email"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-password">Contrasena temporal</Label>
+                    <Input
+                      autoComplete="new-password"
+                      id="collaborator-password"
+                      minLength={6}
+                      name="password"
+                      placeholder="Minimo 6 caracteres"
+                      required
+                      type="password"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-phone">Telefono</Label>
+                    <Input
+                      autoComplete="tel"
+                      id="collaborator-phone"
+                      name="phone"
+                      placeholder="+503 0000 0000"
+                      type="tel"
+                    />
+                  </div>
+                  {createUserRole === "collaborator" ? (
+                    <>
+                      <div className="grid gap-2">
+                        <Label htmlFor="collaborator-profession">Especialidad</Label>
+                        <Input
+                          id="collaborator-profession"
+                          name="profession"
+                          placeholder="Terapia respiratoria, enfermeria..."
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="collaborator-default-payout">
+                          Tarifa base por visita (USD)
+                        </Label>
+                        <Input
+                          id="collaborator-default-payout"
+                          min="0"
+                          name="defaultPayout"
+                          placeholder="25.00"
+                          step="0.01"
+                          type="number"
+                        />
+                      </div>
+                    </>
+                  ) : null}
                 </div>
                 {createUserRole === "collaborator" ? (
-                  <>
-                    <div className="grid gap-2">
-                      <Label htmlFor="collaborator-profession">Especialidad</Label>
-                      <Input
-                        id="collaborator-profession"
-                        name="profession"
-                        placeholder="Terapia respiratoria, enfermeria..."
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="collaborator-default-payout">
-                        Tarifa base por visita (USD)
-                      </Label>
-                      <Input
-                        id="collaborator-default-payout"
-                        min="0"
-                        name="defaultPayout"
-                        placeholder="25.00"
-                        step="0.01"
-                        type="number"
-                      />
-                    </div>
-                  </>
+                  <div className="grid gap-2">
+                    <Label htmlFor="collaborator-notes">Notas internas</Label>
+                    <Textarea
+                      id="collaborator-notes"
+                      name="notes"
+                      placeholder="Disponibilidad, zona de cobertura o indicaciones administrativas"
+                    />
+                  </div>
                 ) : null}
-              </div>
-              {createUserRole === "collaborator" ? (
-                <div className="grid gap-2">
-                  <Label htmlFor="collaborator-notes">Notas internas</Label>
-                  <Textarea
-                    id="collaborator-notes"
-                    name="notes"
-                    placeholder="Disponibilidad, zona de cobertura o indicaciones administrativas"
-                  />
+
+                {createCollaboratorState.status === "error" &&
+                createCollaboratorState.message ? (
+                  <p
+                    aria-live="polite"
+                    className="rounded-[10px] border border-[var(--red)] bg-[var(--red-light)] px-3 py-2 text-sm font-semibold text-[var(--red)]"
+                  >
+                    {createCollaboratorState.message}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] pt-4">
+                  <Button
+                    disabled={creatingCollaborator}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCreateCollaborator(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button disabled={creatingCollaborator} type="submit">
+                    <UserPlusIcon data-icon="inline-start" />
+                    {creatingCollaborator
+                      ? "Creando..."
+                      : createUserRole === "admin"
+                        ? "Crear lider"
+                        : "Crear colaborador"}
+                  </Button>
                 </div>
-              ) : null}
-
-              {createCollaboratorState.status === "error" &&
-              createCollaboratorState.message ? (
-                <p
-                  aria-live="polite"
-                  className="rounded-[10px] border border-[var(--red)] bg-[var(--red-light)] px-3 py-2 text-sm font-semibold text-[var(--red)]"
-                >
-                  {createCollaboratorState.message}
-                </p>
-              ) : null}
-
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  disabled={creatingCollaborator}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateCollaborator(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button disabled={creatingCollaborator} type="submit">
-                  <UserPlusIcon data-icon="inline-start" />
-                  {creatingCollaborator
-                    ? "Creando..."
-                    : createUserRole === "admin"
-                      ? "Crear lider"
-                      : "Crear colaborador"}
-                </Button>
-              </div>
-            </form>
-          </Panel>
+              </form>
+            </div>
+          </div>
         ) : null}
         <Panel>
           <Table>
@@ -1511,6 +1664,12 @@ export function KromedWorkspace({
               {clinicalNotes.find((note) => note.visit_id === visit.id)?.evolution_text ??
                 "Sin evolución visible."}
             </div>
+            {visit.notes ? (
+              <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3 text-sm text-[var(--ink)]">
+                <span className="font-semibold">Notas internas: </span>
+                {visit.notes}
+              </div>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="outline">Reasignar</Button>
               <Button type="button" variant="outline">Rechazar / pedir corrección</Button>
@@ -1526,11 +1685,221 @@ export function KromedWorkspace({
     return (
       <div className="flex flex-col gap-4">
         <div className="flex justify-end">
-          <Button type="button">
+          <button
+            aria-controls="new-inventory-dialog"
+            aria-expanded={showCreateInventory}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium whitespace-nowrap text-primary-foreground transition-all outline-none hover:bg-primary/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            data-testid="open-inventory-form"
+            type="button"
+            onClick={() => setShowCreateInventory(true)}
+            onPointerDown={() => setShowCreateInventory(true)}
+          >
             <PlusIcon data-icon="inline-start" />
             Agregar insumo o equipo
-          </Button>
+          </button>
         </div>
+        {showCreateInventory ? (
+          <div
+            aria-labelledby="new-inventory-title"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(15,23,42,.42)] px-4 py-8 backdrop-blur-sm"
+            id="new-inventory-dialog"
+            role="dialog"
+          >
+            <div className="w-full max-w-3xl rounded-[18px] border border-[var(--line)] bg-white shadow-[0_24px_80px_rgba(38,49,63,.22)]">
+              <div className="border-b border-[var(--line)] px-5 py-4">
+                <h2
+                  className="font-[var(--font-heading)] text-xl font-extrabold text-[var(--ink)]"
+                  id="new-inventory-title"
+                >
+                  Nuevo insumo o equipo
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                  Completa los datos y guarda para verlo en la tabla
+                  correspondiente.
+                </p>
+              </div>
+              <form action={createInventoryFormAction} className="grid gap-4 p-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="inventory-item-type">Tipo</Label>
+                    <select
+                      className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                      id="inventory-item-type"
+                      name="itemType"
+                      value={inventoryFormType}
+                      onChange={(event) =>
+                        setInventoryFormType(
+                          event.currentTarget.value === "equipment"
+                            ? "equipment"
+                            : "supply",
+                        )
+                      }
+                    >
+                      <option value="supply">Insumo</option>
+                      <option value="equipment">Equipo en alquiler</option>
+                    </select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="inventory-name">
+                      {inventoryFormType === "equipment" ? "Equipo" : "Insumo"}
+                    </Label>
+                    <Input
+                      id="inventory-name"
+                      name="name"
+                      placeholder={
+                        inventoryFormType === "equipment"
+                          ? "Concentrador de oxígeno"
+                          : "Mascarilla"
+                      }
+                      required
+                    />
+                  </div>
+
+                  {inventoryFormType === "supply" ? (
+                    <>
+                      <div className="grid gap-2">
+                        <Label htmlFor="inventory-patient-charge">
+                          Precio al paciente (USD)
+                        </Label>
+                        <Input
+                          id="inventory-patient-charge"
+                          min="0"
+                          name="patientCharge"
+                          placeholder="5.00"
+                          step="0.01"
+                          type="number"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="inventory-stock">Inventario</Label>
+                        <Input
+                          id="inventory-stock"
+                          min="0"
+                          name="stockQuantity"
+                          placeholder="50"
+                          step="1"
+                          type="number"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="inventory-status">Estado</Label>
+                        <select
+                          className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                          defaultValue="active"
+                          id="inventory-status"
+                          name="supplyStatus"
+                        >
+                          <option value="active">Activo</option>
+                          <option value="inactive">Inactivo</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center rounded-[12px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)]">
+                          <input
+                            className="size-4 accent-[var(--primary)]"
+                            defaultChecked
+                            name="trackStock"
+                            type="checkbox"
+                          />
+                          Rastrear inventario
+                        </label>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid gap-2">
+                        <Label htmlFor="equipment-patient">Paciente</Label>
+                        <select
+                          className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                          id="equipment-patient"
+                          name="patientId"
+                          required
+                        >
+                          <option value="">Seleccionar paciente</option>
+                          {data.patients.map((patient) => (
+                            <option key={patient.id} value={patient.id}>
+                              {patient.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="equipment-monthly-charge">
+                          Cobro mensual (USD)
+                        </Label>
+                        <Input
+                          id="equipment-monthly-charge"
+                          min="0"
+                          name="monthlyCharge"
+                          placeholder="35.00"
+                          required
+                          step="0.01"
+                          type="number"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="equipment-period-start">
+                          Inicio del alquiler
+                        </Label>
+                        <Input
+                          id="equipment-period-start"
+                          name="periodStart"
+                          required
+                          type="date"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="equipment-period-end">
+                          Fin del alquiler
+                        </Label>
+                        <Input id="equipment-period-end" name="periodEnd" type="date" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="equipment-status">Estado</Label>
+                        <select
+                          className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                          defaultValue="active"
+                          id="equipment-status"
+                          name="equipmentStatus"
+                        >
+                          <option value="active">Activo</option>
+                          <option value="ended">Finalizado</option>
+                          <option value="canceled">Cancelado</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {createInventoryState.status === "error" &&
+                createInventoryState.message ? (
+                  <p
+                    aria-live="polite"
+                    className="rounded-[10px] border border-[var(--red)] bg-[var(--red-light)] px-3 py-2 text-sm font-semibold text-[var(--red)]"
+                  >
+                    {createInventoryState.message}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] pt-4">
+                  <Button
+                    disabled={creatingInventoryItem}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCreateInventory(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button disabled={creatingInventoryItem} type="submit">
+                    <BoxesIcon data-icon="inline-start" />
+                    {creatingInventoryItem ? "Guardando..." : "Guardar"}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        ) : null}
         <Panel title="Insumos">
           <Table>
             <TableHeader>
@@ -1601,11 +1970,158 @@ export function KromedWorkspace({
     return (
       <div className="flex flex-col gap-4">
         <div className="flex justify-end">
-          <Button type="button">
+          <button
+            aria-controls="new-visit-code-dialog"
+            aria-expanded={showCreateShiftCode}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium whitespace-nowrap text-primary-foreground transition-all outline-none hover:bg-primary/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            data-testid="open-visit-code-form"
+            type="button"
+            onPointerDown={() => setShowCreateShiftCode(true)}
+            onClick={() => setShowCreateShiftCode(true)}
+          >
             <PlusIcon data-icon="inline-start" />
             Agregar código
-          </Button>
+          </button>
         </div>
+        {showCreateShiftCode ? (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(15,23,42,.42)] px-4 py-8 backdrop-blur-sm"
+            id="new-visit-code-dialog"
+            role="dialog"
+            aria-labelledby="new-visit-code-title"
+          >
+            <div className="w-full max-w-3xl rounded-[18px] border border-[var(--line)] bg-white shadow-[0_24px_80px_rgba(38,49,63,.22)]">
+              <div className="border-b border-[var(--line)] px-5 py-4">
+                <h2
+                  className="font-[var(--font-heading)] text-xl font-extrabold text-[var(--ink)]"
+                  id="new-visit-code-title"
+                >
+                  Nuevo código de visita
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                  Completa los datos del código para guardarlo en Supabase y
+                  mostrarlo en la tabla de esta pestaña.
+                </p>
+              </div>
+              <form action={createShiftCodeFormAction} className="grid gap-4 p-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-code">Código</Label>
+                    <Input
+                      id="shift-code-code"
+                      name="code"
+                      placeholder="0146"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-name">Nombre / significado</Label>
+                    <Input
+                      id="shift-code-name"
+                      name="name"
+                      placeholder="Turno hospital diurno"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-start">Hora inicio</Label>
+                    <Input id="shift-code-start" name="startTime" required type="time" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-end">Hora fin</Label>
+                    <Input id="shift-code-end" name="endTime" required type="time" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-hours">Horas</Label>
+                    <Input
+                      id="shift-code-hours"
+                      min="0.25"
+                      name="hours"
+                      placeholder="8"
+                      required
+                      step="0.25"
+                      type="number"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-type">Tipo</Label>
+                    <select
+                      className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                      defaultValue="custom"
+                      id="shift-code-type"
+                      name="shiftType"
+                    >
+                      <option value="day">Día</option>
+                      <option value="night">Noche</option>
+                      <option value="mixed">Mixto</option>
+                      <option value="custom">Personalizado</option>
+                    </select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="shift-code-availability">Disponibilidad</Label>
+                    <select
+                      className="h-10 w-full rounded-md border border-[var(--line)] bg-white px-3 text-sm font-semibold text-[var(--ink)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                      defaultValue="neutral"
+                      id="shift-code-availability"
+                      name="availabilityBehavior"
+                    >
+                      <option value="neutral">Neutral</option>
+                      <option value="unavailable">No disponible</option>
+                      <option value="available">Disponible</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)]">
+                      <input
+                        className="size-4 accent-[var(--primary)]"
+                        name="appliesGlobally"
+                        type="checkbox"
+                      />
+                      Aplica globalmente
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)]">
+                      <input name="active" type="hidden" value="off" />
+                      <input
+                        className="size-4 accent-[var(--primary)]"
+                        defaultChecked
+                        name="active"
+                        type="checkbox"
+                        value="on"
+                      />
+                      Activo
+                    </label>
+                  </div>
+                </div>
+
+                {createShiftCodeState.status === "error" &&
+                createShiftCodeState.message ? (
+                  <p
+                    aria-live="polite"
+                    className="rounded-[10px] border border-[var(--red)] bg-[var(--red-light)] px-3 py-2 text-sm font-semibold text-[var(--red)]"
+                  >
+                    {createShiftCodeState.message}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] pt-4">
+                  <Button
+                    disabled={creatingShiftCode}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCreateShiftCode(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button disabled={creatingShiftCode} type="submit">
+                    <Code2Icon data-icon="inline-start" />
+                    {creatingShiftCode ? "Creando..." : "Guardar código"}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        ) : null}
         <Panel>
           <Table>
             <TableHeader>
@@ -1636,7 +2152,7 @@ export function KromedWorkspace({
               {!data.shiftCodes.length ? (
                 <TableRow>
                   <TableCell colSpan={6}>
-                    <EmptyNote tone="plain">No hay códigos de turno visibles.</EmptyNote>
+                    <EmptyNote tone="plain">No hay códigos de visita visibles.</EmptyNote>
                   </TableCell>
                 </TableRow>
               ) : null}
