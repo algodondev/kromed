@@ -153,6 +153,13 @@ Expected behavior:
 - Transcribes audio through ElevenLabs when an audio URL is available.
 - Resolves the sender against `patients.contact_phone`,
   `collaborators.contact_phone`, and `profiles.phone`.
+- Staff routing is explicit for the MVP:
+  - Leader/admin: `+50379164921`.
+  - Collaborator: `+50376202883`.
+  - Any other inbound phone number enters the patient path. If the phone does
+    not match an existing patient, the workflow may collect intake context but
+    must not disclose visit, schedule, clinical, or financial data until the
+    patient is linked to a Kromed record.
 - Uses native n8n Supabase nodes to read approved context and write
   `conversations`, `conversation_messages`, `reschedule_requests` when
   applicable, and `automation_runs`.
@@ -198,7 +205,7 @@ The latest verification passed all scripted cases:
 - patient reschedule escalation.
 - patient operational question answered through AI plus Supabase context.
 - collaborator reschedule request creation.
-- unknown sender no-disclosure response.
+- unmatched patient intake/no-disclosure response.
 - clinical or emergency escalation response.
 - voice-note transcription path.
 - voice-note missing-audio-url clarification path.
