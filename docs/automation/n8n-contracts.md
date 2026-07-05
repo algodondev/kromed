@@ -167,9 +167,8 @@ Mapping to the current schema:
   `https://cbuild.app.n8n.cloud/webhook/kromed/voice-note-transcription-preview`.
 - Voice note transcription preview works with manual transcript payloads.
   ElevenLabs Speech-to-Text is configured in n8n through the `ElevenLabs API Key`
-  credential and has been validated with a generated Spanish audio sample. A
-  real Zavu inbound audio payload still needs to be captured to confirm the
-  downloadable audio URL field.
+  credential and has been validated with a generated Spanish audio sample and a
+  real WhatsApp voice note from Zavu.
 - Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
   production reminders should use the open WhatsApp window or approved
   templates once available.
@@ -199,3 +198,29 @@ The workflow returns an HTML page showing the sender, channel, message id, audio
 player, and transcript. Once ElevenLabs is configured, the workflow can use
 `POST https://api.elevenlabs.io/v1/speech-to-text` with model `scribe_v2` and
 `source_url` for automatic transcription.
+
+Real Zavu inbound audio payload shape:
+
+```json
+{
+  "timestamp": 1783219417599,
+  "data": {
+    "from": "+50375419727",
+    "to": "+17626678164",
+    "channel": "whatsapp",
+    "messageType": "audio",
+    "content": {
+      "mediaId": "1522751965964281",
+      "mediaUrl": "https://scintillating-platypus-663.convex.cloud/api/storage/05b45c8d-cd9c-4b9b-9d6d-40a665413737",
+      "mimeType": "audio/ogg; codecs=opus"
+    },
+    "providerTimestamp": 1783219413000
+  }
+}
+```
+
+Verified transcription:
+
+```text
+Paciente toleró la terapia sin complicaciones. A continuar ejercicios respiratorios
+```
