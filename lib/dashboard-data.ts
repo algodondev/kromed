@@ -31,8 +31,15 @@ export async function getDashboardData() {
     visitsResult,
     inventoryResult,
     payoutLinesResult,
+    payoutPeriodsResult,
     automationRunsResult,
     paymentsResult,
+    patientAssignmentsResult,
+    clinicalNotesResult,
+    visitSuppliesResult,
+    equipmentRentalsResult,
+    shiftCodesResult,
+    hospitalShiftsResult,
   ] = await Promise.all([
     supabase
       .from("patients")
@@ -57,6 +64,10 @@ export async function getDashboardData() {
       .select("*, patients(full_name), collaborators(name), visits(scheduled_start)")
       .order("created_at", { ascending: false }),
     supabase
+      .from("payout_periods")
+      .select("*, collaborators(name)")
+      .order("period_start", { ascending: false }),
+    supabase
       .from("automation_runs")
       .select("*")
       .order("created_at", { ascending: false })
@@ -65,6 +76,31 @@ export async function getDashboardData() {
       .from("patient_payments")
       .select("*, patients(full_name)")
       .order("received_at", { ascending: false }),
+    supabase
+      .from("patient_assignments")
+      .select("*, patients(full_name), collaborators(name, profession)")
+      .eq("active", true)
+      .order("assigned_at", { ascending: false }),
+    supabase
+      .from("visit_clinical_notes")
+      .select("*, visits(patient_id), profiles(display_name)")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("visit_supplies")
+      .select("*, inventory_items(name), visits(patient_id)")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("equipment_rentals")
+      .select("*, patients(full_name)")
+      .order("period_start", { ascending: false }),
+    supabase
+      .from("shift_codes")
+      .select("*")
+      .order("code", { ascending: true }),
+    supabase
+      .from("hospital_shifts")
+      .select("*, collaborators(name, profession), shift_codes(code, name)")
+      .order("starts_at", { ascending: true }),
   ]);
 
   const patients = patientsResult.data ?? [];
@@ -72,8 +108,15 @@ export async function getDashboardData() {
   const visits = visitsResult.data ?? [];
   const inventory = inventoryResult.data ?? [];
   const payoutLines = payoutLinesResult.data ?? [];
+  const payoutPeriods = payoutPeriodsResult.data ?? [];
   const automationRuns = automationRunsResult.data ?? [];
   const payments = paymentsResult.data ?? [];
+  const patientAssignments = patientAssignmentsResult.data ?? [];
+  const clinicalNotes = clinicalNotesResult.data ?? [];
+  const visitSupplies = visitSuppliesResult.data ?? [];
+  const equipmentRentals = equipmentRentalsResult.data ?? [];
+  const shiftCodes = shiftCodesResult.data ?? [];
+  const hospitalShifts = hospitalShiftsResult.data ?? [];
 
   return {
     profile,
@@ -83,16 +126,36 @@ export async function getDashboardData() {
     visits,
     inventory,
     payoutLines,
+    payoutPeriods,
     automationRuns,
     payments,
-    errors: [
+    patientAssignments,
+    clinicalNotes,
+    visitSupplies,
+    equipmentRentals,
+    shiftCodes,
+    hospitalShifts,
+    errorMessages: [
       patientsResult.error,
       collaboratorsResult.error,
       visitsResult.error,
       inventoryResult.error,
       payoutLinesResult.error,
+      payoutPeriodsResult.error,
       automationRunsResult.error,
       paymentsResult.error,
-    ].filter(Boolean),
+      patientAssignmentsResult.error,
+      clinicalNotesResult.error,
+      visitSuppliesResult.error,
+      equipmentRentalsResult.error,
+      shiftCodesResult.error,
+      hospitalShiftsResult.error,
+    ].reduce<string[]>((messages, error) => {
+      if (error) {
+        messages.push(error.message);
+      }
+
+      return messages;
+    }, []),
   };
 }
