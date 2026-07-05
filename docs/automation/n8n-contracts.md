@@ -17,6 +17,10 @@ Created in the `cbuild` n8n Cloud workspace:
 - `Kromed - Zavu WhatsApp Smoke Test`
   - ID: `ooULHOx2xvRKHUVH`
   - Trigger: webhook for verifying n8n can send WhatsApp through Zavu.
+- `Kromed - Zavu Template Smoke Test`
+  - ID: `8gF761PGw6dL8fQy`
+  - Trigger: webhook for verifying approved template delivery through Zavu.
+  - Status: inactive until the Meta template is approved.
 - `Kromed - WhatsApp Voice Note Transcription Preview`
   - ID: `nuO6rBXYCgSule36`
   - Trigger: webhook for inbound WhatsApp audio or manual preview payloads.
@@ -34,6 +38,8 @@ n8n variables:
 - `KROMED_APP_URL`
 - `KARLA_PHONE`
 - `ZAVU_CHANNEL`
+- `ZAVU_REMINDER_TEMPLATE_ID`
+- `ZAVU_REMINDER_TEMPLATE_NAME`
 - `KROMED_AUTOMATION_API_TOKEN`
 
 n8n credentials:
@@ -173,6 +179,34 @@ Mapping to the current schema:
 - Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
   production reminders should use the open WhatsApp window or approved
   templates once available.
+
+## WhatsApp Template Reminder
+
+Template created in Zavu and submitted to Meta:
+
+```text
+id: ks70t73sdhehe1zt6fbnmt11dn89ze78
+name: kromed_visit_reminder_es
+status: pending
+category: UTILITY
+language: es
+```
+
+Template body:
+
+```text
+Hola {{1}}, le recordamos su visita de Kromed programada para {{2}}. Responda CONFIRMAR si todo esta bien o REPROGRAMAR si necesita otra hora.
+```
+
+Variables:
+
+- `1`: patient name
+- `2`: visit date/time
+
+The `Kromed - Upcoming Visit Reminder` workflow is configured to send this
+template through Zavu using `ZAVU_REMINDER_TEMPLATE_ID`. It should remain
+inactive until the template status is `approved` and Kromed automation endpoints
+exist.
 
 ## Voice Note Transcription Preview
 
