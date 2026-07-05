@@ -17,9 +17,14 @@ Created in the `cbuild` n8n Cloud workspace:
 - `Kromed - Zavu WhatsApp Smoke Test`
   - ID: `ooULHOx2xvRKHUVH`
   - Trigger: webhook for verifying n8n can send WhatsApp through Zavu.
+- `Kromed - WhatsApp Voice Note Transcription Preview`
+  - ID: `nuO6rBXYCgSule36`
+  - Trigger: webhook for inbound WhatsApp audio or manual preview payloads.
+  - Output: HTML preview with audio metadata, audio player, and transcript.
 
 The product workflows remain inactive until Kromed endpoints and app tokens are
-ready. The smoke test workflow is active for integration verification.
+ready. The smoke test and transcription preview workflows are active for
+integration verification.
 
 ## Required Environment
 
@@ -29,6 +34,7 @@ n8n variables:
 - `KARLA_PHONE`
 - `ZAVU_CHANNEL`
 - `KROMED_AUTOMATION_API_TOKEN`
+- `ELEVENLABS_API_KEY`
 
 n8n credentials:
 
@@ -156,6 +162,38 @@ Mapping to the current schema:
 - `KROMED_AUTOMATION_API_TOKEN` must be configured in both Kromed and n8n.
 - Zavu WhatsApp has been verified from n8n. Smoke test message
   `jx75tyeq0ne64p5q29kaegf3yd89z2a8` was delivered to `+50375419727`.
+- Zavu inbound webhooks are active for `message.inbound` and
+  `message.unsupported` events and point to:
+  `https://cbuild.app.n8n.cloud/webhook/kromed/voice-note-transcription-preview`.
+- Voice note transcription preview works with manual transcript payloads. Real
+  ElevenLabs transcription requires `ELEVENLABS_API_KEY` in n8n and a Zavu
+  inbound audio payload with a downloadable `audioUrl`.
 - Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
   production reminders should use the open WhatsApp window or approved
   templates once available.
+
+## Voice Note Transcription Preview
+
+Webhook path:
+
+```text
+kromed/voice-note-transcription-preview
+```
+
+Manual preview payload:
+
+```json
+{
+  "from": "+50375419727",
+  "channel": "whatsapp",
+  "messageType": "audio",
+  "messageId": "manual-preview",
+  "audioUrl": "https://example.com/audio.wav",
+  "transcript": "Paciente tolero la terapia sin complicaciones."
+}
+```
+
+The workflow returns an HTML page showing the sender, channel, message id, audio
+player, and transcript. Once ElevenLabs is configured, the workflow can use
+`POST https://api.elevenlabs.io/v1/speech-to-text` with model `scribe_v2` and
+`source_url` for automatic transcription.
