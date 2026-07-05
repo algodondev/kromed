@@ -293,17 +293,15 @@ Mapping to the current schema:
 - Zavu WhatsApp has been verified from n8n. Smoke test message
   `jx75tyeq0ne64p5q29kaegf3yd89z2a8` was delivered to `+50375419727`.
 - Zavu inbound webhooks are active for `message.inbound` and
-  `message.unsupported` events and point to:
-  `https://cbuild.app.n8n.cloud/webhook/kromed/voice-note-transcription-preview`.
-- Before production agent testing, repoint the Zavu inbound webhook to:
+  `message.unsupported` events and now point to:
   `https://cbuild.app.n8n.cloud/webhook/kromed/inbound-message-agent`.
 - Voice note transcription preview works with manual transcript payloads.
   ElevenLabs Speech-to-Text is configured in n8n through the `ElevenLabs API Key`
   credential and has been validated with a generated Spanish audio sample and a
   real WhatsApp voice note from Zavu.
-- Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
-  production reminders should use the open WhatsApp window or approved
-  templates once available.
+- The Zavu sender reports `canSendTemplates: true`, but the Kromed reminder
+  template is still pending approval. Production reminders outside the open
+  WhatsApp window should wait for the approved template.
 
 ## WhatsApp Template Reminder
 
