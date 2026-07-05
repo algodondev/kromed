@@ -16,19 +16,19 @@ Created in the `cbuild` n8n Cloud workspace:
   - Trigger: schedule every 15 minutes.
 - `Kromed - Pending Validation Digest`
   - ID: `xmPXh8mi1kEwDzaS`
-  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Trigger: active manual n8n webhook, ready for a later schedule trigger.
   - Output: Karla WhatsApp digest plus `automation_runs` log call.
 - `Kromed - Reschedule Request Notification`
   - ID: `X920NGGJKRpQoYzB`
-  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Trigger: active manual n8n webhook, ready for a later schedule trigger.
   - Output: Karla WhatsApp digest plus `automation_runs` log call.
 - `Kromed - Payout Draft Digest`
   - ID: `c42tYeyiRsaCOsnS`
-  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Trigger: active manual n8n webhook, ready for a later schedule trigger.
   - Output: Karla WhatsApp payout summary plus `automation_runs` log call.
 - `Kromed - Monthly Summary Digest`
   - ID: `4uZkZIE5b2uDLIJX`
-  - Trigger: manual n8n webhook, ready for a later schedule trigger.
+  - Trigger: active manual n8n webhook, ready for a later schedule trigger.
   - Output: Karla WhatsApp monthly operations summary plus `automation_runs`
     log call.
 - `Kromed - Zavu WhatsApp Smoke Test`
@@ -69,13 +69,14 @@ Created in the `cbuild` n8n Cloud workspace:
   - Output: authorized Kromed business mutation result with operation status,
     related entity, reply text, and mutation metadata.
 
-Reminder and digest product workflows remain inactive until Kromed endpoints
-and app tokens are ready. The smoke test, transcription preview, inbound agent,
-agent test suite, AI draft workflow, Supabase context workflow, and business
-operations workflow are active for integration verification. The Business
-Operations Tool has retry-on-fail enabled on its Supabase nodes, but recent
-non-mutating smoke tests still timed out around the `Get operation visits`
-step, so it needs further performance or query narrowing before demo reliance.
+Reminder workflows that initiate patient WhatsApp messages remain inactive
+until the Meta template is approved. The smoke test, transcription preview,
+inbound agent, agent test suite, AI draft workflow, Supabase context workflow,
+business operations workflow, and manual admin/report digests are active for
+integration verification. The Business Operations Tool has retry-on-fail
+enabled on its Supabase nodes, but recent non-mutating smoke tests still timed
+out around the `Get operation visits` step, so it needs further performance or
+query narrowing before demo reliance.
 
 ## Required Environment
 
@@ -425,10 +426,12 @@ Mapping to the current schema:
 
 ## Current Blockers
 
-- `KROMED_APP_URL` in n8n is still a placeholder.
-- `KROMED_AUTOMATION_API_TOKEN` must be configured in both Kromed and n8n.
-- Endpoint-backed admin digest workflows exist, but remain inactive until the
-  URL and token are configured.
+- `KROMED_APP_URL` is configured in n8n as `https://kromed.netlify.app`.
+- `KROMED_AUTOMATION_API_TOKEN` is configured in both Kromed Netlify runtime and
+  n8n.
+- `SUPABASE_SERVICE_ROLE_KEY` is configured in Kromed Netlify runtime.
+- Endpoint-backed admin digest workflows exist and are active as manual n8n
+  webhooks.
 - Zavu WhatsApp has been verified from n8n. Smoke test message
   `jx75tyeq0ne64p5q29kaegf3yd89z2a8` was delivered to `+50375419727`.
 - Zavu inbound webhooks are active for `message.inbound` and
@@ -563,6 +566,15 @@ Behavior:
   success counts.
 - Sends the summary to Karla through Zavu.
 - Logs the workflow through `POST /api/automation/runs`.
+
+Verified 2026-07-05:
+
+- n8n read `/api/automation/reports/monthly-summary` from the deployed Netlify
+  app.
+- n8n sent WhatsApp message `jx72094vbf3kescb6qbmravm4d89y5h7` through Zavu.
+- Zavu reported the message as `delivered`.
+- Kromed inserted an `automation_runs` row with workflow
+  `monthly_summary_digest` and status `succeeded`.
 
 ## Voice Note Transcription Preview
 
