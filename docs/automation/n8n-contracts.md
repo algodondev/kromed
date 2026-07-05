@@ -14,9 +14,12 @@ Created in the `cbuild` n8n Cloud workspace:
 - `Kromed - Upcoming Visit Reminder`
   - ID: `LyF0lSy3xCdaqTtf`
   - Trigger: schedule every 15 minutes.
+- `Kromed - Zavu WhatsApp Smoke Test`
+  - ID: `ooULHOx2xvRKHUVH`
+  - Trigger: webhook for verifying n8n can send WhatsApp through Zavu.
 
-Both workflows are inactive until Kromed endpoints and provider credentials are
-ready.
+The product workflows remain inactive until Kromed endpoints and app tokens are
+ready. The smoke test workflow is active for integration verification.
 
 ## Required Environment
 
@@ -151,6 +154,8 @@ Mapping to the current schema:
 
 - `KROMED_APP_URL` in n8n is still a placeholder.
 - `KROMED_AUTOMATION_API_TOKEN` must be configured in both Kromed and n8n.
-- Zavu currently has an SMS-capable sender; WhatsApp must be connected through
-  Zavu/Meta before WhatsApp delivery is active.
-- Free-form WhatsApp messages require an open 24-hour conversation window.
+- Zavu WhatsApp has been verified from n8n. Smoke test message
+  `jx75tyeq0ne64p5q29kaegf3yd89z2a8` was delivered to `+50375419727`.
+- Zavu templates are not enabled yet (`canSendTemplates: false`), so outbound
+  production reminders should use the open WhatsApp window or approved
+  templates once available.
