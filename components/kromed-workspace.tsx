@@ -76,6 +76,12 @@ type View =
 type PatientTab = "info" | "team" | "evolution" | "visits" | "finance";
 type FinanceTab = "income" | "payouts";
 type AgendaFormat = "list" | "calendar";
+type ReportType = "patient" | "financial" | "collaborator";
+type ReportStatus =
+  | { state: "idle" }
+  | { state: "loading" }
+  | { state: "success"; message: string }
+  | { state: "error"; message: string };
 
 type Patient = DashboardData["patients"][number];
 type Visit = DashboardData["visits"][number] & {
@@ -588,6 +594,19 @@ export function KromedWorkspace({
       message: "",
     },
   );
+  const [reportPatientId, setReportPatientId] = React.useState(
+    data.patients[0]?.id ?? "",
+  );
+  const [reportCollaboratorId, setReportCollaboratorId] = React.useState(
+    data.collaborators[0]?.id ?? "",
+  );
+  const [reportStatus, setReportStatus] = React.useState<
+    Record<ReportType, ReportStatus>
+  >({
+    patient: { state: "idle" },
+    financial: { state: "idle" },
+    collaborator: { state: "idle" },
+  });
 
   const collaboratorMap = React.useMemo(
     () => new Map(data.collaborators.map((collaborator) => [collaborator.id, collaborator])),
@@ -602,6 +621,62 @@ export function KromedWorkspace({
     collaboratorMap.get(activeCollaboratorId) ?? data.collaborators[0] ?? null;
   const selectedPatient =
     (selectedPatientId ? patientMap.get(selectedPatientId) : null) ?? data.patients[0] ?? null;
+
+  const generateReport = async (reportType: ReportType) => {
+    const payload: {
+      reportType: ReportType;
+      patientId?: string;
+      collaboratorId?: string;
+    } = { reportType };
+
+    if (reportType === "patient") {
+      payload.patientId = reportPatientId;
+    }
+
+    if (reportType === "collaborator") {
+      payload.collaboratorId = reportCollaboratorId;
+    }
+
+    setReportStatus((current) => ({
+      ...current,
+      [reportType]: { state: "loading" },
+    }));
+
+    try {
+      const response = await fetch("/api/reports/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        report?: { title?: string };
+      };
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "No se pudo generar el reporte.");
+      }
+
+      setReportStatus((current) => ({
+        ...current,
+        [reportType]: {
+          state: "success",
+          message: `${result.report?.title ?? "Reporte"} enviado por n8n.`,
+        },
+      }));
+    } catch (error) {
+      setReportStatus((current) => ({
+        ...current,
+        [reportType]: {
+          state: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "No se pudo generar el reporte.",
+        },
+      }));
+    }
+  };
 
   const goToView = (nextView: View, patientId?: string) => {
     setView(nextView);
@@ -2397,20 +2472,29 @@ export function KromedWorkspace({
   }
 
   function renderReports() {
-    const cards = [
+    const cards: Array<{
+      type: ReportType;
+      title: string;
+      icon: LucideIcon;
+      sub: string;
+      items: string[];
+    }> = [
       {
+        type: "patient",
         title: "Reporte por paciente",
         icon: UsersRoundIcon,
         sub: "Selecciona un paciente para generarlo",
         items: ["Visitas realizadas", "Evolución", "Insumos utilizados", "Profesionales asignados"],
       },
       {
+        type: "financial",
         title: "Reporte financiero",
         icon: WalletCardsIcon,
         sub: "Periodo actual",
         items: ["Ingresos del mes", "Pagos realizados", "Pagos pendientes"],
       },
       {
+        type: "collaborator",
         title: "Reporte colaborador",
         icon: UserPlusIcon,
         sub: "Selecciona un colaborador para generarlo",
@@ -2422,6 +2506,8 @@ export function KromedWorkspace({
       <div className="grid gap-4 lg:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
+          const status = reportStatus[card.type];
+          const isLoading = status.state === "loading";
 
           return (
             <Panel key={card.title}>
@@ -2435,9 +2521,67 @@ export function KromedWorkspace({
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-              <Button size="sm" type="button" variant="outline">
-                Generar reporte
+              {card.type === "patient" ? (
+                <div className="mb-3 grid gap-2">
+                  <Label htmlFor="report-patient">Paciente</Label>
+                  <select
+                    className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                    disabled={isLoading}
+                    id="report-patient"
+                    onChange={(event) => setReportPatientId(event.target.value)}
+                    value={reportPatientId}
+                  >
+                    {data.patients.map((patient) => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {card.type === "collaborator" ? (
+                <div className="mb-3 grid gap-2">
+                  <Label htmlFor="report-collaborator">Colaborador</Label>
+                  <select
+                    className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                    disabled={isLoading}
+                    id="report-collaborator"
+                    onChange={(event) => setReportCollaboratorId(event.target.value)}
+                    value={reportCollaboratorId}
+                  >
+                    {data.collaborators.map((collaborator) => (
+                      <option key={collaborator.id} value={collaborator.id}>
+                        {collaborator.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <Button
+                disabled={
+                  isLoading ||
+                  (card.type === "patient" && !reportPatientId) ||
+                  (card.type === "collaborator" && !reportCollaboratorId)
+                }
+                onClick={() => void generateReport(card.type)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {isLoading ? "Generando..." : "Generar reporte"}
               </Button>
+              {status.state === "success" || status.state === "error" ? (
+                <p
+                  className={cn(
+                    "mt-3 text-xs leading-5",
+                    status.state === "success"
+                      ? "text-[var(--secondary-dark)]"
+                      : "text-[var(--red)]",
+                  )}
+                >
+                  {status.message}
+                </p>
+              ) : null}
             </Panel>
           );
         })}

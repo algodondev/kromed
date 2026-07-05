@@ -31,6 +31,11 @@ Created in the `cbuild` n8n Cloud workspace:
   - Trigger: manual n8n webhook, ready for a later schedule trigger.
   - Output: Karla WhatsApp monthly operations summary plus `automation_runs`
     log call.
+- `Kromed - UI Report Delivery`
+  - ID: `YEMm9rgfyZDPpHnO`
+  - Trigger: active manual n8n webhook called by Kromed server-side report
+    generation.
+  - Output: Karla WhatsApp report message plus `automation_runs` log call.
 - `Kromed - Zavu WhatsApp Smoke Test`
   - ID: `ooULHOx2xvRKHUVH`
   - Trigger: webhook for verifying n8n can send WhatsApp through Zavu.
@@ -480,6 +485,44 @@ exist.
 These workflows are created in n8n but remain inactive until `KROMED_APP_URL`
 points to the deployed Kromed app and `KROMED_AUTOMATION_API_TOKEN` is set in
 both n8n and the app server.
+
+## UI Report Delivery
+
+Kromed report buttons call a server-side app route:
+
+```text
+POST /api/reports/generate
+```
+
+The route validates the signed-in profile and only allows active admins to
+trigger report delivery. The browser does not receive the n8n webhook URL.
+
+Server environment:
+
+```text
+N8N_UI_REPORT_DELIVERY_WEBHOOK_URL
+```
+
+n8n webhook path:
+
+```text
+kromed/ui-report-delivery
+```
+
+Supported report types:
+
+- `patient`: selected patient visit count, latest visit, latest evolution note,
+  supplies total, and assigned team.
+- `financial`: current-month visits, charges, received payments, pending
+  balance, and collaborator payout total.
+- `collaborator`: selected collaborator visit count, completed/pending
+  validation visits, patients served, payout generated, and latest visit.
+
+Expected n8n behavior:
+
+- Send the report summary to Karla through Zavu.
+- Record the delivery through `POST /api/automation/runs` with workflow
+  `ui_report_delivery`.
 
 ### Pending Validation Digest
 
